@@ -5,6 +5,7 @@ export class CollisionDetector {
         this.roadPositions = [];
         this.buildingPositions = [];
         this.treePositions = [];
+        this.rockPositions = [];
     }
 
     // Add road positions for collision detection
@@ -79,6 +80,25 @@ export class CollisionDetector {
         console.log(`🌳 Added ${this.treePositions.length} tree positions for collision detection`);
     }
 
+    // Add rocks from terrain.userData.rocks if available
+    addRocksFromTerrain(terrain) {
+        this.rockPositions = [];
+        const rocks = terrain && terrain.userData && terrain.userData.rocks ? terrain.userData.rocks : [];
+        rocks.forEach((rock, i) => {
+            const box = new THREE.Box3().setFromObject(rock);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            this.rockPositions.push({
+                x: center.x,
+                z: center.z,
+                width: size.x,
+                height: size.z,
+                type: 'rock'
+            });
+        });
+        console.log(`🪨 Added ${this.rockPositions.length} rock positions for collision detection`);
+    }
+
     // Check if two objects overlap
     checkOverlap(obj1, obj2) {
         if (obj1.type === 'tree' && obj2.type === 'tree') {
@@ -97,6 +117,16 @@ export class CollisionDetector {
             const dx = Math.abs(obj1.x - obj2.x);
             const dz = Math.abs(obj1.z - obj2.z);
             return dx < (obj1.width + obj2.width)/2 && dz < (obj1.height + obj2.height)/2;
+        } else if (obj1.type === 'rock' && obj2.type === 'horizontal') {
+            // Rock to horizontal road
+            const dx = Math.abs(obj1.x - obj2.x);
+            const dz = Math.abs(obj1.z - obj2.z);
+            return dx < (obj1.width/2 + obj2.width/2) && dz < (obj1.height/2 + obj2.height/2);
+        } else if (obj1.type === 'rock' && obj2.type === 'vertical') {
+            // Rock to vertical road
+            const dx = Math.abs(obj1.x - obj2.x);
+            const dz = Math.abs(obj1.z - obj2.z);
+            return dx < (obj1.width/2 + obj2.width/2) && dz < (obj1.height/2 + obj2.height/2);
         } else if (obj1.type === 'tree' && obj2.type === 'horizontal') {
             // Tree to horizontal road collision
             const dx = Math.abs(obj1.x - obj2.x);
@@ -117,6 +147,11 @@ export class CollisionDetector {
             const dx = Math.abs(obj1.x - obj2.x);
             const dz = Math.abs(obj1.z - obj2.z);
             return dx < (obj1.width + obj2.width)/2 && dz < (obj1.height + obj2.height)/2;
+        } else if (obj1.type === 'rock' && obj2.type === 'building') {
+            // Rock to building
+            const dx = Math.abs(obj1.x - obj2.x);
+            const dz = Math.abs(obj1.z - obj2.z);
+            return dx < (obj1.width/2 + obj2.width/2) && dz < (obj1.height/2 + obj2.height/2);
         }
         return false;
     }
@@ -126,6 +161,24 @@ export class CollisionDetector {
         this.collisions = [];
         console.log('🔍 Starting comprehensive collision detection...');
         
+        // Check rock to road collisions
+        console.log('  🪨 Checking rock to road collisions...');
+        let rockRoadCollisions = 0;
+        this.rockPositions.forEach((rock, i) => {
+            this.roadPositions.forEach((road, j) => {
+                if (this.checkOverlap(rock, road)) {
+                    this.collisions.push({
+                        type: 'rock-road',
+                        object1: `Rock ${i+1} at (${rock.x.toFixed(1)}, ${rock.z.toFixed(1)})`,
+                        object2: `${road.type} road at (${road.x.toFixed(1)}, ${road.z.toFixed(1)})`,
+                        severity: 'low'
+                    });
+                    rockRoadCollisions++;
+                }
+            });
+        });
+        console.log(`    Found ${rockRoadCollisions} rock-road collisions`);
+
         // Check tree to road collisions
         console.log('  🌳 Checking tree to road collisions...');
         let treeRoadCollisions = 0;
@@ -161,6 +214,24 @@ export class CollisionDetector {
             });
         });
         console.log(`    Found ${buildingRoadCollisions} building-road collisions`);
+
+        // Check rock to building collisions
+        console.log('  🪨🏢 Checking rock to building collisions...');
+        let rockBuildingCollisions = 0;
+        this.rockPositions.forEach((rock, i) => {
+            this.buildingPositions.forEach((building, j) => {
+                if (this.checkOverlap(rock, building)) {
+                    this.collisions.push({
+                        type: 'rock-building',
+                        object1: `Rock ${i+1} at (${rock.x.toFixed(1)}, ${rock.z.toFixed(1)})`,
+                        object2: `Building ${j+1} at (${building.x.toFixed(1)}, ${building.z.toFixed(1)})`,
+                        severity: 'low'
+                    });
+                    rockBuildingCollisions++;
+                }
+            });
+        });
+        console.log(`    Found ${rockBuildingCollisions} rock-building collisions`);
 
         // Check tree to building collisions
         console.log('  🌳🏢 Checking tree to building collisions...');
@@ -219,8 +290,10 @@ export class CollisionDetector {
         // Summary
         console.log('📊 Collision Detection Summary:');
         console.log(`  🚨 Total collisions: ${this.collisions.length}`);
+        console.log(`  🪨 Rock-road collisions: ${rockRoadCollisions}`);
         console.log(`  🌳 Tree-road collisions: ${treeRoadCollisions}`);
         console.log(`  🏢 Building-road collisions: ${buildingRoadCollisions}`);
+        console.log(`  🪨🏢 Rock-building collisions: ${rockBuildingCollisions}`);
         console.log(`  🌳🏢 Tree-building collisions: ${treeBuildingCollisions}`);
         console.log(`  🌳🌳 Tree-tree collisions: ${treeTreeCollisions}`);
         console.log(`  🏢🏢 Building-building collisions: ${buildingBuildingCollisions}`);

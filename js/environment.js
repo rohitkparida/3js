@@ -54,6 +54,9 @@ export class EnvironmentManager {
             this.scene.add(building);
             this.objects.push(building);
         });
+
+        // Nudge terrain rocks away from roads and buildings
+        this.nudgeRocksAwayFromCollisions(terrain, this.roads, this.buildings);
         
         // Create trees with external models
         const treeLoader = new TreeLoader();
@@ -119,6 +122,51 @@ export class EnvironmentManager {
                 if (canopy) {
                     canopy.rotation.z = Math.sin(time * 0.5 + index) * 0.1;
                 }
+            }
+        });
+    }
+
+    // Move rocks slightly if they overlap roads or buildings
+    nudgeRocksAwayFromCollisions(terrain, roads, buildings) {
+        if (!terrain || !terrain.userData || !terrain.userData.rocks) return;
+        const rocks = terrain.userData.rocks;
+        const roadBoxes = roads.map(r => new THREE.Box3().setFromObject(r));
+        const buildingBoxes = buildings.map(b => new THREE.Box3().setFromObject(b));
+        const isOverlapping = (box, target) => box.intersectsBox(target);
+        const step = 1.2;
+        rocks.forEach((rock) => {
+            const box = new THREE.Box3().setFromObject(rock);
+            let tries = 0;
+            while (tries < 30 && (roadBoxes.some(b => isOverlapping(box, b)) || buildingBoxes.some(b => isOverlapping(box, b)))) {
+                // Find nearest overlapping box center
+                let nearestCenter = null;
+                let minDist = Infinity;
+                const center = box.getCenter(new THREE.Vector3());
+                const check = (targets) => {
+                    targets.forEach(t => {
+                        if (isOverlapping(box, t)) {
+                            const c = t.getCenter(new THREE.Vector3());
+                            const d = center.distanceToSquared(c);
+                            if (d < minDist) { minDist = d; nearestCenter = c; }
+                        }
+                    });
+                };
+                check(roadBoxes);
+                check(buildingBoxes);
+                let dir = new THREE.Vector3(1, 0, 0);
+                if (nearestCenter) {
+                    dir = new THREE.Vector3().subVectors(center, nearestCenter);
+                    if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
+                    dir.setY(0).normalize().multiplyScalar(step);
+                } else {
+                    dir.set(1, 0, 0).multiplyScalar(step);
+                }
+                rock.position.add(dir);
+                box.translate(dir);
+                tries++;
+            }
+            if (tries > 0) {
+                console.log(`🪨 Nudged rock to (${rock.position.x.toFixed(1)}, ${rock.position.z.toFixed(1)}) after ${tries} step(s)`);
             }
         });
     }

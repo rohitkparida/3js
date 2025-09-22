@@ -80,11 +80,13 @@ export class Game {
         const roads = this.environmentManager.roads || [];
         const buildings = this.environmentManager.buildings || [];
         const trees = this.environmentManager.trees || [];
+        const terrain = this.scene.children.find(o => o.userData && o.userData.rocks);
         
         // Add objects to collision detector
         this.collisionDetector.addRoads(roads);
         this.collisionDetector.addBuildings(buildings);
         this.collisionDetector.addTrees(trees);
+        if (terrain) this.collisionDetector.addRocksFromTerrain(terrain);
         
         // Detect all collisions
         const collisions = this.collisionDetector.detectAllCollisions();

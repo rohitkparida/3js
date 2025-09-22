@@ -42,6 +42,7 @@ export function createTerrain() {
 // Add neat, organized terrain details
 function addTerrainDetails(terrain) {
     const detailGroup = new THREE.Group();
+    const rocks = [];
     
     // Add a few rocks in organized clusters
     const rockClusters = [
@@ -58,28 +59,14 @@ function addTerrainDetails(terrain) {
             const offsetZ = (Math.random() - 0.5) * 8;
             rock.position.set(cluster.x + offsetX, 0.05, cluster.z + offsetZ);
             detailGroup.add(rock);
-        }
-    });
-    
-    // Add grass patches in organized areas
-    const grassAreas = [
-        { x: -40, z: 0, count: 4 },
-        { x: 40, z: 0, count: 4 },
-        { x: 0, z: -40, count: 3 },
-        { x: 0, z: 40, count: 3 }
-    ];
-    
-    grassAreas.forEach(area => {
-        for (let i = 0; i < area.count; i++) {
-            const grassPatch = createGrassPatch();
-            const offsetX = (Math.random() - 0.5) * 10;
-            const offsetZ = (Math.random() - 0.5) * 10;
-            grassPatch.position.set(area.x + offsetX, 0.02, area.z + offsetZ);
-            detailGroup.add(grassPatch);
+            rocks.push(rock);
         }
     });
     
     terrain.add(detailGroup);
+    // Expose rocks so other systems (collision, logging) can read them
+    terrain.userData = terrain.userData || {};
+    terrain.userData.rocks = rocks;
 }
 
 // Create small rock
@@ -90,7 +77,7 @@ function createRock() {
         4
     );
     const rockMaterial = new THREE.MeshLambertMaterial({
-        color: 0x666666 + Math.random() * 0x333333
+        color: 0x444444
     });
     const rock = new THREE.Mesh(rockGeometry, rockMaterial);
     rock.scale.set(
@@ -105,36 +92,6 @@ function createRock() {
     );
     rock.castShadow = true;
     rock.receiveShadow = true;
+    rock.name = 'rock';
     return rock;
-}
-
-// Create grass patch
-function createGrassPatch() {
-    const patchGroup = new THREE.Group();
-    
-    // Create multiple grass blades
-    for (let i = 0; i < 8 + Math.random() * 12; i++) {
-        const blade = createGrassBlade();
-        blade.position.set(
-            (Math.random() - 0.5) * 2,
-            0,
-            (Math.random() - 0.5) * 2
-        );
-        blade.rotation.y = Math.random() * Math.PI * 2;
-        patchGroup.add(blade);
-    }
-    
-    return patchGroup;
-}
-
-// Create individual grass blade
-function createGrassBlade() {
-    const bladeGeometry = new THREE.CylinderGeometry(0.01, 0.02, 0.3 + Math.random() * 0.4, 3);
-    const bladeMaterial = new THREE.MeshLambertMaterial({
-        color: 0x228B22 + Math.random() * 0x444444
-    });
-    const blade = new THREE.Mesh(bladeGeometry, bladeMaterial);
-    blade.castShadow = true;
-    blade.receiveShadow = true;
-    return blade;
 }
