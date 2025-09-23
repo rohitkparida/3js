@@ -43,6 +43,23 @@ export function createTerrain() {
 function addTerrainDetails(terrain) {
     const detailGroup = new THREE.Group();
     const rocks = [];
+    const primaryZ = [ -60, -40, -20, 0, 20, 40, 60 ];
+    const primaryX = [ -60, -40, 0, 40, 60 ];
+    const rockClearance = 5; // minimum distance from road centerlines
+    function clampAwayFromRoads(pos) {
+        for (const rz of primaryZ) {
+            const dz = Math.abs(pos.z - rz);
+            if (dz < rockClearance) {
+                pos.z = rz + (pos.z >= rz ? 1 : -1) * (rockClearance + Math.random());
+            }
+        }
+        for (const rx of primaryX) {
+            const dx = Math.abs(pos.x - rx);
+            if (dx < rockClearance) {
+                pos.x = rx + (pos.x >= rx ? 1 : -1) * (rockClearance + Math.random());
+            }
+        }
+    }
     
     // Add a few rocks in organized clusters
     const rockClusters = [
@@ -58,6 +75,7 @@ function addTerrainDetails(terrain) {
             const offsetX = (Math.random() - 0.5) * 8;
             const offsetZ = (Math.random() - 0.5) * 8;
             rock.position.set(cluster.x + offsetX, 0.05, cluster.z + offsetZ);
+            clampAwayFromRoads(rock.position);
             detailGroup.add(rock);
             rocks.push(rock);
         }

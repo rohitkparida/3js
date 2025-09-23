@@ -69,8 +69,9 @@ export class Game {
         // Setup event listeners
         this.setupEventListeners();
         
-        // Hide loading screen
-        document.getElementById('loading').style.display = 'none';
+        // Hide legacy loader if present (overlay fades in main.js)
+        const legacy = document.getElementById('loading');
+        if (legacy) legacy.style.display = 'none';
     }
     
     runCollisionDetection() {
@@ -151,9 +152,9 @@ export class Game {
 }
 
 // Initialize and start the game
-export function initGame() {
+export async function initGame() {
     const game = new Game();
-    game.init();
+    await game.init();
     game.start();
     return game;
 }

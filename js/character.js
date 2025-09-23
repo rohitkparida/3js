@@ -39,6 +39,84 @@ export function createCharacter() {
         }
     });
     
+    // Try to load external mascot model asynchronously (fallback is the primitive above)
+    try {
+        const hasOBJ = typeof THREE !== 'undefined' && THREE.OBJLoader;
+        if (hasOBJ) {
+            const loader = new THREE.OBJLoader();
+            loader.load(
+                'models/mascot.obj',
+                (obj) => {
+                    // Prepare mascot: scale to a reasonable height and center on ground
+                    const box = new THREE.Box3().setFromObject(obj);
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+                    const desiredHeight = 1.2; // roughly match old character height
+                    const scale = desiredHeight / maxDim;
+                    obj.scale.setScalar(scale);
+
+                    // Recompute box after scale to center vertically on ground
+                    const box2 = new THREE.Box3().setFromObject(obj);
+                    const center = box2.getCenter(new THREE.Vector3());
+                    const min = box2.min;
+                    obj.position.sub(center); // center at origin
+                    obj.position.y -= min.y * scale; // lift so feet touch ground
+
+                    // Try to load and apply mascot texture (PNG)
+                    const textureLoader = new THREE.TextureLoader();
+                    textureLoader.load(
+                        'models/mascot.png',
+                        (tex) => {
+                            if (THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+                            obj.traverse((child) => {
+                                if (child.isMesh) {
+                                    child.castShadow = true;
+                                    child.receiveShadow = true;
+                                    const mat = new THREE.MeshStandardMaterial({
+                                        map: tex,
+                                        roughness: 0.8,
+                                        metalness: 0.0
+                                    });
+                                    mat.side = THREE.FrontSide;
+                                    child.material = mat;
+                                }
+                            });
+                            console.log('🖼️ Mascot texture applied');
+                        },
+                        undefined,
+                        () => {
+                            // If texture fails, still ensure shadows/material sanity
+                            obj.traverse((child) => {
+                                if (child.isMesh) {
+                                    child.castShadow = true;
+                                    child.receiveShadow = true;
+                                    if (child.material) child.material.side = THREE.FrontSide;
+                                }
+                            });
+                            console.warn('Mascot texture not found; using default material');
+                        }
+                    );
+
+                    // Hide primitive fallback and add mascot
+                    body.visible = false;
+                    head.visible = false;
+                    leftLeg.visible = false;
+                    rightLeg.visible = false;
+                    characterGroup.add(obj);
+                    console.log('🦊 Mascot model loaded and applied');
+                },
+                undefined,
+                (err) => {
+                    console.warn('Mascot OBJ load failed; using fallback character', err);
+                }
+            );
+        } else {
+            console.warn('OBJLoader not available; using fallback character');
+        }
+    } catch (e) {
+        console.warn('Mascot setup error; using fallback character', e);
+    }
+
     return characterGroup;
 }
 
