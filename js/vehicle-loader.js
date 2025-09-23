@@ -207,21 +207,25 @@ export class VehicleLoader {
             'models/car2.glb' // Using same model for now, you can add the second model filename
         ];
         
-        const carConfigs = [
+        // Evenly distribute three paint colors across all cars: orange, blue, dull red
+        const colorPalette = [0xFFA500, 0x0000FF, 0x8B0000];
+
+        // Car placement and orientation (no fixed color per spot)
+        const carSpots = [
             // Main Street (horizontal) - cars on left side, facing east
-            { x: -10, z: -1.2, color: 0xFFD700, rotation: 0 },
-            { x: 10, z: -1.2, color: 0x0000FF, rotation: 0 },
-            
+            { x: -10, z: -1.2, rotation: 0 },
+            { x: 10, z: -1.2, rotation: 0 },
+
             // Residential streets (horizontal) - cars on left side, facing east
-            { x: -15, z: 18.5, color: 0x32CD32, rotation: 0 },
-            { x: 15, z: 18.5, color: 0xFF69B4, rotation: 0 },
-            { x: -15, z: -18.5, color: 0xFF4500, rotation: 0 },
-            { x: 15, z: -18.5, color: 0x9370DB, rotation: 0 },
-            
+            { x: -15, z: 18.5, rotation: 0 },
+            { x: 15, z: 18.5, rotation: 0 },
+            { x: -15, z: -18.5, rotation: 0 },
+            { x: 15, z: -18.5, rotation: 0 },
+
             // Vertical roads - cars on left side, facing north
-            { x: -1.2, z: 17, color: 0x8B4513, rotation: Math.PI/2 },
-            { x: 1.2, z: 17, color: 0xDC143C, rotation: Math.PI/2 },
-            { x: -1.2, z: -12, color: 0x4169E1, rotation: Math.PI/2 }
+            { x: -1.2, z: 17, rotation: Math.PI/2 },
+            { x: 1.2, z: 17, rotation: Math.PI/2 },
+            { x: -1.2, z: -12, rotation: Math.PI/2 }
         ];
         
         console.log('🚗 Loading vehicle fleet with external models...');
@@ -232,45 +236,46 @@ export class VehicleLoader {
         console.log('  - Residential streets: y=±20, width=6, lanes at z=-3 to z=+3');
         console.log('  - All cars should be on LEFT side of their respective roads');
         
-        for (let i = 0; i < carConfigs.length; i++) {
-            const config = carConfigs[i];
+        for (let i = 0; i < carSpots.length; i++) {
+            const spot = carSpots[i];
+            const color = colorPalette[i % colorPalette.length];
             const modelUrl = carModels[i % carModels.length]; // Cycle through available models
             
-            console.log(`🔄 Creating car ${i + 1}/${carConfigs.length} with model: ${modelUrl}`);
-            console.log(`📍 Car ${i + 1} config: x=${config.x}, z=${config.z}, rotation=${config.rotation.toFixed(2)}`);
+            console.log(`🔄 Creating car ${i + 1}/${carSpots.length} with model: ${modelUrl}`);
+            console.log(`📍 Car ${i + 1} config: x=${spot.x}, z=${spot.z}, rotation=${spot.rotation.toFixed(2)}, color=#${color.toString(16).padStart(6, '0')}`);
             
             // Determine which road this car is on
             let roadInfo = '';
-            if (Math.abs(config.z) < 3) {
+            if (Math.abs(spot.z) < 3) {
                 roadInfo = `Main Street (horizontal, y=0) - LEFT lane should be z=-1.5 to z=-3`;
-            } else if (Math.abs(config.x) < 3) {
+            } else if (Math.abs(spot.x) < 3) {
                 roadInfo = `Central Avenue (vertical, x=0) - LEFT lane should be x=-1.5 to x=-3`;
-            } else if (Math.abs(config.z - 20) < 3) {
+            } else if (Math.abs(spot.z - 20) < 3) {
                 roadInfo = `Residential Street (horizontal, y=20) - LEFT lane should be z=18.5 to z=17`;
-            } else if (Math.abs(config.z + 20) < 3) {
+            } else if (Math.abs(spot.z + 20) < 3) {
                 roadInfo = `Residential Street (horizontal, y=-20) - LEFT lane should be z=-18.5 to z=-17`;
             } else {
-                roadInfo = `Unknown road location - z=${config.z}, x=${config.x}`;
+                roadInfo = `Unknown road location - z=${spot.z}, x=${spot.x}`;
             }
             console.log(`🛣️ Car ${i + 1} is on: ${roadInfo}`);
             
             try {
                 const car = await this.createCar(
-                    config.x, 
-                    config.z, 
-                    config.color, 
-                    config.rotation, 
+                    spot.x, 
+                    spot.z, 
+                    color, 
+                    spot.rotation, 
                     modelUrl
                 );
                 vehicles.push(car);
-                console.log(`✅ Car ${i + 1}/${carConfigs.length} created successfully at (${config.x}, ${config.z})`);
+                console.log(`✅ Car ${i + 1}/${carSpots.length} created successfully at (${spot.x}, ${spot.z})`);
             } catch (error) {
                 console.error('❌ Error creating car:', error);
                 // Create fallback car
                 console.log('🔄 Creating fallback car...');
-                const fallbackCar = await this.createCar(config.x, config.z, config.color, config.rotation);
+                const fallbackCar = await this.createCar(spot.x, spot.z, color, spot.rotation);
                 vehicles.push(fallbackCar);
-                console.log(`✅ Fallback car ${i + 1} created at (${config.x}, ${config.z})`);
+                console.log(`✅ Fallback car ${i + 1} created at (${spot.x}, ${spot.z})`);
             }
         }
         
