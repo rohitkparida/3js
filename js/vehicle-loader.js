@@ -157,24 +157,33 @@ export class VehicleLoader {
             carModel = this.createFallbackCar();
         }
         
-        // Apply color to the model
+        // Apply color to the model (GLB-friendly):
+        // - Default: paint body with the provided color
+        // - Wheels stay black
+        // - Headlights stay yellow
         carModel.traverse((child) => {
-            if (child.isMesh && child.material && child.material.color) {
-                // Apply different colors to different parts
-                if (child.geometry.type === 'BoxGeometry' && child.position.y > 1) {
-                    // Roof - darker color
-                    child.material.color.setHex(0x222222);
-                } else if (child.geometry.type === 'BoxGeometry') {
-                    // Body - main color
-                    child.material.color.setHex(color);
-                } else if (child.geometry.type === 'CylinderGeometry') {
-                    // Wheels - keep black
-                    child.material.color.setHex(0x000000);
-                } else if (child.geometry.type === 'SphereGeometry') {
-                    // Headlights - keep yellow
-                    child.material.color.setHex(0xFFFFAA);
+            if (!child.isMesh || !child.material) return;
+
+            const childName = (child.name || '').toLowerCase();
+            const isWheel = childName.includes('wheel') || childName.includes('tire') || childName.includes('tyre');
+            const isLight = childName.includes('light') || childName.includes('headlight');
+
+            // Some GLB materials may be arrays
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+
+            materials.forEach((mat) => {
+                if (!mat) return;
+                if (isWheel) {
+                    if (mat.color) mat.color.setHex(0x000000);
+                    return;
                 }
-            }
+                if (isLight) {
+                    if (mat.color) mat.color.setHex(0xFFFFAA);
+                    return;
+                }
+                // Body or other parts: tint to target color
+                if (mat.color) mat.color.setHex(color);
+            });
         });
         
         carModel.position.set(x, 0.1, z); // Slightly above ground to sit on road
