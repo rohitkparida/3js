@@ -89,6 +89,15 @@ export class EnvironmentManager {
             this.addPillarColliders(fallbackArch, { pillarWidth: 1.1, depth: 1.0, height: 5.5 });
         }
 
+        // Add logo on a podium near the center
+        try {
+            const logoGroup = await this.createLogoOnPodium('models/logo.glb', { x: 6, z: -62, ry: Math.PI / 8 });
+            if (logoGroup) {
+                this.scene.add(logoGroup);
+                this.objects.push(logoGroup);
+            }
+        } catch (_) {}
+
         // Create boundary walls
         this.boundaryWalls = createBoundaryWalls(this.scene, this.world);
         
@@ -310,5 +319,82 @@ export class EnvironmentManager {
 
         group.userData = group.userData || {};
         group.userData.pillarBodies = [leftBody, rightBody];
+    }
+
+    // Create a simple podium and place the GLB logo on top
+    async createLogoOnPodium(url, pos = { x: 0, z: 0, ry: 0 }) {
+        return new Promise((resolve) => {
+            if (!THREE || !THREE.GLTFLoader) return resolve(null);
+            const group = new THREE.Group();
+
+            // Podium: stepped cylinders
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.85, metalness: 0.05 });
+            const step1 = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.25, 32), baseMat);
+            const step2 = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 1.8, 0.25, 32), baseMat);
+            const step3 = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 0.25, 32), baseMat);
+            step1.position.y = 0.125;
+            step2.position.y = 0.125 + 0.25;
+            step3.position.y = 0.125 + 0.5;
+            [step1, step2, step3].forEach(m => { m.castShadow = true; m.receiveShadow = true; });
+            group.add(step1); group.add(step2); group.add(step3);
+
+            // Load logo
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                url,
+                (gltf) => {
+                    const logo = gltf.scene;
+                    logo.traverse((child) => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = true; } });
+
+                    // Classify meshes: assume largest-volume mesh is the block, others are text/logo glyphs
+                    const meshEntries = [];
+                    logo.traverse((child) => {
+                        if (child.isMesh) {
+                            const b = new THREE.Box3().setFromObject(child);
+                            const s = b.getSize(new THREE.Vector3());
+                            const volume = Math.max(0.0001, s.x * s.y * s.z);
+                            meshEntries.push({ mesh: child, volume });
+                        }
+                    });
+                    if (meshEntries.length) {
+                        meshEntries.sort((a, b) => b.volume - a.volume);
+                        const blockMesh = meshEntries[0].mesh;
+                        const blockMat = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.6, metalness: 0.0 });
+                        blockMat.side = THREE.FrontSide;
+                        blockMesh.material = blockMat;
+                        for (let i = 1; i < meshEntries.length; i++) {
+                            const textMesh = meshEntries[i].mesh;
+                            const textMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.7, metalness: 0.0 });
+                            textMat.side = THREE.FrontSide;
+                            textMesh.material = textMat;
+                        }
+                    }
+                    // Scale logo to fit podium nicely (~1 unit tall)
+                    const box = new THREE.Box3().setFromObject(logo);
+                    const size = box.getSize(new THREE.Vector3());
+                    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+                    const targetHeight = 3.0; // make clearly visible
+                    const s = targetHeight / maxDim;
+                    logo.scale.setScalar(s);
+
+                    // Recenter and place on top step so its base sits flush
+                    const box2 = new THREE.Box3().setFromObject(logo);
+                    const center = box2.getCenter(new THREE.Vector3());
+                    logo.position.sub(center);
+                    const boxAfterCenter = new THREE.Box3().setFromObject(logo);
+                    const minY = boxAfterCenter.min.y;
+                    const topY = step3.position.y + 0.125 + 0.01;
+                    logo.position.y += -minY + topY;
+
+                    group.add(logo);
+                    group.position.set(pos.x, 0, pos.z);
+                    if (pos.ry) group.rotation.y = pos.ry;
+                    group.name = 'logo_podium';
+                    resolve(group);
+                },
+                undefined,
+                () => resolve(group)
+            );
+        });
     }
 }
