@@ -546,7 +546,7 @@ export class EnvironmentManager {
                     lookAtPoint.y += options.height; // aim roughly at head
                     rig.lookAt(lookAtPoint);
                     // Correct model's forward axis by +90° so lens points at target
-                    rig.rotateY(Math.PI / 2);
+                    rig.rotateY(Math.PI / 0.65);
                     rig.name = 'tripod_camera_rig';
 
                     resolve(rig);
