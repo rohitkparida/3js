@@ -157,33 +157,24 @@ export class VehicleLoader {
             carModel = this.createFallbackCar();
         }
         
-        // Apply color to the model (GLB-friendly):
-        // - Default: paint body with the provided color
-        // - Wheels stay black
-        // - Headlights stay yellow
+        // Apply color to the model
         carModel.traverse((child) => {
-            if (!child.isMesh || !child.material) return;
-
-            const childName = (child.name || '').toLowerCase();
-            const isWheel = childName.includes('wheel') || childName.includes('tire') || childName.includes('tyre');
-            const isLight = childName.includes('light') || childName.includes('headlight');
-
-            // Some GLB materials may be arrays
-            const materials = Array.isArray(child.material) ? child.material : [child.material];
-
-            materials.forEach((mat) => {
-                if (!mat) return;
-                if (isWheel) {
-                    if (mat.color) mat.color.setHex(0x000000);
-                    return;
+            if (child.isMesh && child.material && child.material.color) {
+                // Apply different colors to different parts
+                if (child.geometry.type === 'BoxGeometry' && child.position.y > 1) {
+                    // Roof - darker color
+                    child.material.color.setHex(0x222222);
+                } else if (child.geometry.type === 'BoxGeometry') {
+                    // Body - main color
+                    child.material.color.setHex(color);
+                } else if (child.geometry.type === 'CylinderGeometry') {
+                    // Wheels - keep black
+                    child.material.color.setHex(0x000000);
+                } else if (child.geometry.type === 'SphereGeometry') {
+                    // Headlights - keep yellow
+                    child.material.color.setHex(0xFFFFAA);
                 }
-                if (isLight) {
-                    if (mat.color) mat.color.setHex(0xFFFFAA);
-                    return;
-                }
-                // Body or other parts: tint to target color
-                if (mat.color) mat.color.setHex(color);
-            });
+            }
         });
         
         carModel.position.set(x, 0.1, z); // Slightly above ground to sit on road
@@ -216,25 +207,21 @@ export class VehicleLoader {
             'models/car2.glb' // Using same model for now, you can add the second model filename
         ];
         
-        // Evenly distribute three paint colors across all cars: orange, blue, dull red
-        const colorPalette = [0xFFA500, 0x0000FF, 0x8B0000];
-
-        // Car placement and orientation (no fixed color per spot)
-        const carSpots = [
+        const carConfigs = [
             // Main Street (horizontal) - cars on left side, facing east
-            { x: -10, z: -1.2, rotation: 0 },
-            { x: 10, z: -1.2, rotation: 0 },
-
+            { x: -10, z: -1.2, color: 0xFFD700, rotation: 0 },
+            { x: 10, z: -1.2, color: 0x0000FF, rotation: 0 },
+            
             // Residential streets (horizontal) - cars on left side, facing east
-            { x: -15, z: 18.5, rotation: 0 },
-            { x: 15, z: 18.5, rotation: 0 },
-            { x: -15, z: -18.5, rotation: 0 },
-            { x: 15, z: -18.5, rotation: 0 },
-
+            { x: -15, z: 18.5, color: 0x32CD32, rotation: 0 },
+            { x: 15, z: 18.5, color: 0xFF69B4, rotation: 0 },
+            { x: -15, z: -18.5, color: 0xFF4500, rotation: 0 },
+            { x: 15, z: -18.5, color: 0x9370DB, rotation: 0 },
+            
             // Vertical roads - cars on left side, facing north
-            { x: -1.2, z: 17, rotation: Math.PI/2 },
-            { x: 1.2, z: 17, rotation: Math.PI/2 },
-            { x: -1.2, z: -12, rotation: Math.PI/2 }
+            { x: -1.2, z: 17, color: 0x8B4513, rotation: Math.PI/2 },
+            { x: 1.2, z: 17, color: 0xDC143C, rotation: Math.PI/2 },
+            { x: -1.2, z: -12, color: 0x4169E1, rotation: Math.PI/2 }
         ];
         
         console.log('🚗 Loading vehicle fleet with external models...');
@@ -245,46 +232,45 @@ export class VehicleLoader {
         console.log('  - Residential streets: y=±20, width=6, lanes at z=-3 to z=+3');
         console.log('  - All cars should be on LEFT side of their respective roads');
         
-        for (let i = 0; i < carSpots.length; i++) {
-            const spot = carSpots[i];
-            const color = colorPalette[i % colorPalette.length];
+        for (let i = 0; i < carConfigs.length; i++) {
+            const config = carConfigs[i];
             const modelUrl = carModels[i % carModels.length]; // Cycle through available models
             
-            console.log(`🔄 Creating car ${i + 1}/${carSpots.length} with model: ${modelUrl}`);
-            console.log(`📍 Car ${i + 1} config: x=${spot.x}, z=${spot.z}, rotation=${spot.rotation.toFixed(2)}, color=#${color.toString(16).padStart(6, '0')}`);
+            console.log(`🔄 Creating car ${i + 1}/${carConfigs.length} with model: ${modelUrl}`);
+            console.log(`📍 Car ${i + 1} config: x=${config.x}, z=${config.z}, rotation=${config.rotation.toFixed(2)}`);
             
             // Determine which road this car is on
             let roadInfo = '';
-            if (Math.abs(spot.z) < 3) {
+            if (Math.abs(config.z) < 3) {
                 roadInfo = `Main Street (horizontal, y=0) - LEFT lane should be z=-1.5 to z=-3`;
-            } else if (Math.abs(spot.x) < 3) {
+            } else if (Math.abs(config.x) < 3) {
                 roadInfo = `Central Avenue (vertical, x=0) - LEFT lane should be x=-1.5 to x=-3`;
-            } else if (Math.abs(spot.z - 20) < 3) {
+            } else if (Math.abs(config.z - 20) < 3) {
                 roadInfo = `Residential Street (horizontal, y=20) - LEFT lane should be z=18.5 to z=17`;
-            } else if (Math.abs(spot.z + 20) < 3) {
+            } else if (Math.abs(config.z + 20) < 3) {
                 roadInfo = `Residential Street (horizontal, y=-20) - LEFT lane should be z=-18.5 to z=-17`;
             } else {
-                roadInfo = `Unknown road location - z=${spot.z}, x=${spot.x}`;
+                roadInfo = `Unknown road location - z=${config.z}, x=${config.x}`;
             }
             console.log(`🛣️ Car ${i + 1} is on: ${roadInfo}`);
             
             try {
                 const car = await this.createCar(
-                    spot.x, 
-                    spot.z, 
-                    color, 
-                    spot.rotation, 
+                    config.x, 
+                    config.z, 
+                    config.color, 
+                    config.rotation, 
                     modelUrl
                 );
                 vehicles.push(car);
-                console.log(`✅ Car ${i + 1}/${carSpots.length} created successfully at (${spot.x}, ${spot.z})`);
+                console.log(`✅ Car ${i + 1}/${carConfigs.length} created successfully at (${config.x}, ${config.z})`);
             } catch (error) {
                 console.error('❌ Error creating car:', error);
                 // Create fallback car
                 console.log('🔄 Creating fallback car...');
-                const fallbackCar = await this.createCar(spot.x, spot.z, color, spot.rotation);
+                const fallbackCar = await this.createCar(config.x, config.z, config.color, config.rotation);
                 vehicles.push(fallbackCar);
-                console.log(`✅ Fallback car ${i + 1} created at (${spot.x}, ${spot.z})`);
+                console.log(`✅ Fallback car ${i + 1} created at (${config.x}, ${config.z})`);
             }
         }
         
