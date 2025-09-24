@@ -29,6 +29,8 @@ export class EnvironmentManager {
         // Create terrain
         const terrain = createTerrain();
         this.scene.add(terrain);
+        // Keep a reference for grounding raycasts
+        this.terrainRef = terrain;
         
         // Create clean road network
         this.roads = createCleanRoadNetwork();
@@ -95,6 +97,15 @@ export class EnvironmentManager {
             if (logoGroup) {
                 this.scene.add(logoGroup);
                 this.objects.push(logoGroup);
+            }
+        } catch (_) {}
+
+        // Add reporter model near the podium
+        try {
+            const reporter = await this.loadAndPlaceReporter('models/reporter.gltf', { x: 12, z: -64 }, -Math.PI / 6);
+            if (reporter) {
+                this.scene.add(reporter);
+                // Do NOT add reporter to physics-managed objects to avoid floating from box bodies
             }
         } catch (_) {}
 
@@ -396,5 +407,122 @@ export class EnvironmentManager {
                 () => resolve(group)
             );
         });
+    }
+
+    // Load a glTF reporter and place near podium
+    async loadAndPlaceReporter(url, pos = { x: 0, z: 0 }, ry = 0) {
+        return new Promise((resolve) => {
+            if (!THREE || !THREE.GLTFLoader) return resolve(null);
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                url,
+                (gltf) => {
+                    const model = gltf.scene;
+                    // Apply reporter texture to existing materials (preserve PBR)
+                    const textureLoader = new THREE.TextureLoader();
+                    const tex = textureLoader.load('models/reporter.jpeg');
+                    if ('sRGBEncoding' in THREE) { tex.encoding = THREE.sRGBEncoding; }
+                    if ('SRGBColorSpace' in THREE) { tex.colorSpace = THREE.SRGBColorSpace; }
+                    tex.flipY = false; // glTF expects UV origin at top-left
+                    model.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                            const materials = Array.isArray(child.material) ? child.material : [child.material];
+                            materials.forEach((mat) => {
+                                if (!mat) return;
+                                mat.map = tex;
+                                if ('toneMapped' in mat) mat.toneMapped = true;
+                                if (mat.color) mat.color.setHex(0xFFFFFF);
+                                if ('roughness' in mat) mat.roughness = 0.7;
+                                if ('metalness' in mat) mat.metalness = 0.0;
+                                if ('emissive' in mat && mat.emissive) {
+                                    mat.emissive.setHex(0x202020);
+                                    if ('emissiveIntensity' in mat) mat.emissiveIntensity = 0.25;
+                                }
+                                mat.needsUpdate = true;
+                            });
+                        }
+                    });
+
+                    // Scale to ~1.8 units tall
+                    const box = new THREE.Box3().setFromObject(model);
+                    const size = box.getSize(new THREE.Vector3());
+                    const height = Math.max(0.0001, size.y);
+                    const targetHeight = 1.8;
+                    const s = targetHeight / height;
+                    model.scale.setScalar(s);
+
+                    // Recenter to stand on ground at given pos
+                    const box2 = new THREE.Box3().setFromObject(model);
+                    const center = box2.getCenter(new THREE.Vector3());
+                    model.position.sub(center);
+                    const boxAfter = new THREE.Box3().setFromObject(model);
+                    const minY = boxAfter.min.y;
+                    model.position.set(pos.x, -minY, pos.z);
+                    model.rotation.y = ry;
+                    model.name = 'reporter_npc';
+
+                    // Snap near the nearest road but not on it
+                    try {
+                        const safePlaced = this.placeNearNearestRoad(model, { x: pos.x, z: pos.z }, 1.5);
+                        if (safePlaced) { model.position.x = safePlaced.x; model.position.z = safePlaced.z; }
+                    } catch (_) {}
+
+                    // Ground the reporter using a downward raycast onto terrain
+                    try { this.groundObject(model, minY); } catch (_) {}
+                    resolve(model);
+                },
+                undefined,
+                () => resolve(null)
+            );
+        });
+    }
+
+    // Compute closest point to a Box3
+    closestPointOnBox(box, point) {
+        const clampedX = Math.min(Math.max(point.x, box.min.x), box.max.x);
+        const clampedY = Math.min(Math.max(point.y, box.min.y), box.max.y);
+        const clampedZ = Math.min(Math.max(point.z, box.min.z), box.max.z);
+        return new THREE.Vector3(clampedX, clampedY, clampedZ);
+    }
+
+    // Place an object near the nearest road but offset outside the road bounds
+    placeNearNearestRoad(object3d, desired, offset = 1.2) {
+        if (!this.roads || this.roads.length === 0) return null;
+        const pos = new THREE.Vector3(desired.x, 0, desired.z);
+        let best = null;
+        let bestDist = Infinity;
+        this.roads.forEach((road) => {
+            const box = new THREE.Box3().setFromObject(road);
+            const closest = this.closestPointOnBox(box, pos);
+            const dist = closest.distanceTo(pos);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = { box, closest, road };
+            }
+        });
+        if (!best) return null;
+        // Determine outward direction away from the road box center
+        const boxCenter = best.box.getCenter(new THREE.Vector3());
+        const dir = new THREE.Vector3().subVectors(pos, boxCenter);
+        if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
+        dir.setY(0).normalize();
+        const target = new THREE.Vector3().copy(best.closest).add(dir.multiplyScalar(offset));
+        return { x: target.x, z: target.z };
+    }
+
+    // Raycast down from above the object to terrain and set y so base rests on ground
+    groundObject(object3d, baseOffset = 0) {
+        if (!this.terrainRef || !THREE || !THREE.Raycaster) return;
+        const rayOrigin = new THREE.Vector3(object3d.position.x, (object3d.position.y || 0) + 50, object3d.position.z);
+        const rayDir = new THREE.Vector3(0, -1, 0);
+        const raycaster = new THREE.Raycaster(rayOrigin, rayDir, 0, 200);
+        const targets = Array.isArray(this.terrainRef) ? this.terrainRef : [this.terrainRef];
+        const hits = raycaster.intersectObjects(targets, true);
+        if (hits && hits.length) {
+            const groundY = hits[0].point.y;
+            object3d.position.y = groundY - baseOffset + 0.02;
+        }
     }
 }
