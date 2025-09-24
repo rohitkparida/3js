@@ -109,6 +109,18 @@ export class EnvironmentManager {
             }
         } catch (_) {}
 
+        // Add tripod camera to film the reporter
+        try {
+            if (this.scene) {
+                const reporterObj = this.scene.getObjectByName('reporter_npc');
+                const cameraRig = await this.loadAndPlaceTripodCamera('models/camera.glb', reporterObj, { distance: 3.2, height: 1.4, azimuth: Math.PI * 0.12 });
+                if (cameraRig) {
+                    this.scene.add(cameraRig);
+                    // Not adding to physics; decorative and static
+                }
+            }
+        } catch (_) {}
+
         // Create boundary walls
         this.boundaryWalls = createBoundaryWalls(this.scene, this.world);
         
@@ -472,6 +484,70 @@ export class EnvironmentManager {
                     // Ground the reporter using a downward raycast onto terrain
                     try { this.groundObject(model); } catch (_) {}
                     resolve(model);
+                },
+                undefined,
+                () => resolve(null)
+            );
+        });
+    }
+
+    // Load a tripod camera GLB and place it to film a target (e.g., reporter)
+    async loadAndPlaceTripodCamera(url, targetObject, opts = {}) {
+        const options = {
+            distance: 3.0,   // horizontal distance from target
+            height: 1.3,     // camera head height from ground
+            azimuth: 0.0,    // rotate around target on XZ plane
+            ...opts,
+        };
+        if (!THREE || !THREE.GLTFLoader || !targetObject) return null;
+
+        return new Promise((resolve) => {
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                url,
+                (gltf) => {
+                    const rig = gltf.scene || gltf.scenes?.[0];
+                    if (!rig) return resolve(null);
+
+                    // Enable shadows on meshes
+                    rig.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+
+                    // Scale rig so its height is ~1.6 units
+                    const box = new THREE.Box3().setFromObject(rig);
+                    const size = box.getSize(new THREE.Vector3());
+                    const height = Math.max(0.0001, size.y);
+                    const scale = 1.6 / height;
+                    rig.scale.setScalar(scale);
+
+                    // Recompute after scaling and center to base
+                    const box2 = new THREE.Box3().setFromObject(rig);
+                    const center = box2.getCenter(new THREE.Vector3());
+                    rig.position.sub(center);
+                    const minY = new THREE.Box3().setFromObject(rig).min.y;
+
+                    // Compute placement around target
+                    const targetPos = new THREE.Vector3();
+                    targetObject.getWorldPosition(targetPos);
+                    // Determine target forward (where target looks). If not available, assume -Z to +Z arrangement based on rotation.y
+                    const targetYaw = targetObject.rotation?.y || 0;
+                    const dirFromTarget = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), targetYaw + options.azimuth);
+                    const placePos = targetPos.clone().add(dirFromTarget.multiplyScalar(options.distance));
+
+                    // Set rig position on ground with small offset, then orient to look at target head
+                    rig.position.set(placePos.x, -minY, placePos.z);
+                    try { this.groundObject(rig); } catch (_) {}
+
+                    const lookAtPoint = targetPos.clone();
+                    lookAtPoint.y += options.height; // aim roughly at head
+                    rig.lookAt(lookAtPoint);
+                    rig.name = 'tripod_camera_rig';
+
+                    resolve(rig);
                 },
                 undefined,
                 () => resolve(null)
