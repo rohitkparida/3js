@@ -202,9 +202,15 @@ export class Game {
     
     animate() {
         if (!this.isRunning) return;
-        
-        requestAnimationFrame(() => this.animate());
-        
+
+        const targetFps = CONFIG.RENDERER.TARGET_FPS || 0;
+        if (targetFps > 0) {
+            const frameMs = 1000 / targetFps;
+            setTimeout(() => requestAnimationFrame(() => this.animate()), frameMs);
+        } else {
+            requestAnimationFrame(() => this.animate());
+        }
+
         this.update();
         this.render();
 

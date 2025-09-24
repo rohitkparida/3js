@@ -3,6 +3,12 @@ import { CONFIG } from './config.js';
 // Scene setup
 export function createScene() {
     const scene = new THREE.Scene();
+    // Light fog to hide distant detail and reduce overdraw
+    try {
+        // Fog fully obscures at the far plane; start close to FAR for crisper horizon
+        const nearFog = Math.max(CONFIG.SCENE.FAR - 40, CONFIG.SCENE.FAR * 0.7);
+        scene.fog = new THREE.Fog(0x87ceeb, nearFog, CONFIG.SCENE.FAR);
+    } catch (_) {}
     return scene;
 }
 
@@ -35,7 +41,7 @@ export function createRenderer(canvas) {
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // smoother shadow filtering
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = CONFIG.RENDERER.TONE_MAPPING_EXPOSURE;
     renderer.outputEncoding = THREE.sRGBEncoding;
@@ -74,91 +80,71 @@ export function setupLighting(scene) {
         CONFIG.LIGHTING.DIRECTIONAL_POSITION.z
     );
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = CONFIG.RENDERER.SHADOW_MAP_SIZE;
-    directionalLight.shadow.mapSize.height = CONFIG.RENDERER.SHADOW_MAP_SIZE;
+    // Balanced quality: slightly higher map size and tighter frustum for better texel density
+    directionalLight.shadow.mapSize.width = Math.max(1024, Math.min(2048, 1536));
+    directionalLight.shadow.mapSize.height = Math.max(1024, Math.min(2048, 1536));
     directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 500;
-    directionalLight.shadow.camera.left = -200;
-    directionalLight.shadow.camera.right = 200;
-    directionalLight.shadow.camera.top = 200;
-    directionalLight.shadow.camera.bottom = -200;
-    directionalLight.shadow.bias = -0.0001;
+    directionalLight.shadow.camera.far = 200;
+    directionalLight.shadow.camera.left = -100;
+    directionalLight.shadow.camera.right = 100;
+    directionalLight.shadow.camera.top = 100;
+    directionalLight.shadow.camera.bottom = -100;
+    directionalLight.shadow.bias = -0.0002;
+    if ('normalBias' in directionalLight.shadow) directionalLight.shadow.normalBias = 0.02;
+    // Additional softness for PCFSoft
+    if ('radius' in directionalLight.shadow) directionalLight.shadow.radius = 2;
     scene.add(directionalLight);
     
-    // Multiple soft point lights distributed across the environment
+    // Multiple soft point lights distributed across the environment (optional)
     const pointLights = [];
     
-    // North area light
-    const northLight = new THREE.PointLight(0xffa500, 0.25, 200);
-    northLight.position.set(0, 6, 40);
-    northLight.castShadow = false;
-    scene.add(northLight);
-    pointLights.push(northLight);
-    
-    // South area light
-    const southLight = new THREE.PointLight(0xffa500, 0.25, 200);
-    southLight.position.set(0, 6, -40);
-    southLight.castShadow = false;
-    scene.add(southLight);
-    pointLights.push(southLight);
-    
-    // East area light
-    const eastLight = new THREE.PointLight(0xffa500, 0.25, 200);
-    eastLight.position.set(40, 6, 0);
-    eastLight.castShadow = false;
-    scene.add(eastLight);
-    pointLights.push(eastLight);
-    
-    // West area light
-    const westLight = new THREE.PointLight(0xffa500, 0.25, 200);
-    westLight.position.set(-40, 6, 0);
-    westLight.castShadow = false;
-    scene.add(westLight);
-    pointLights.push(westLight);
+    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS) {
+        const mkPoint = (x, z) => {
+            const l = new THREE.PointLight(0xffa500, 0.22, 70, 2); // modest intensity, limited distance
+            l.position.set(x, 6, z);
+            l.castShadow = false;
+            scene.add(l);
+            pointLights.push(l);
+        };
+        mkPoint(0, 40);   // North
+        mkPoint(0, -40);  // South
+        mkPoint(40, 0);   // East
+        mkPoint(-40, 0);  // West
+    }
     
     // Corner lights for better coverage
     const cornerLights = [];
-    const cornerPositions = [
-        { x: 30, z: 30 },
-        { x: -30, z: 30 },
-        { x: 30, z: -30 },
-        { x: -30, z: -30 }
-    ];
-    
-    cornerPositions.forEach(pos => {
-        const cornerLight = new THREE.PointLight(0xffa500, 0.2, 30);
-        cornerLight.position.set(pos.x, 5, pos.z);
-        cornerLight.castShadow = false;
-        scene.add(cornerLight);
-        cornerLights.push(cornerLight);
-    });
+    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS) {
+        // Very light corner fills for balance at minimal cost
+        const mkCorner = (x, z) => {
+            const c = new THREE.PointLight(0xffe0a0, 0.08, 20, 2);
+            c.position.set(x, 5, z);
+            c.castShadow = false;
+            scene.add(c);
+            cornerLights.push(c);
+        };
+        mkCorner(30, 30);
+        mkCorner(-30, 30);
+        mkCorner(30, -30);
+        mkCorner(-30, -30);
+    }
     
     // Soft fill lights from multiple directions
     const fillLights = [];
-    
-    // North fill light
-    const northFill = new THREE.DirectionalLight(0x87ceeb, 0.2);
-    northFill.position.set(0, 8, 20);
-    scene.add(northFill);
-    fillLights.push(northFill);
-    
-    // South fill light
-    const southFill = new THREE.DirectionalLight(0x87ceeb, 0.2);
-    southFill.position.set(0, 8, -20);
-    scene.add(southFill);
-    fillLights.push(southFill);
-    
-    // East fill light
-    const eastFill = new THREE.DirectionalLight(0x87ceeb, 0.2);
-    eastFill.position.set(20, 8, 0);
-    scene.add(eastFill);
-    fillLights.push(eastFill);
-    
-    // West fill light
-    const westFill = new THREE.DirectionalLight(0x87ceeb, 0.2);
-    westFill.position.set(-20, 8, 0);
-    scene.add(westFill);
-    fillLights.push(westFill);
+    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS) {
+        // Re-introduce very soft directional fills to improve shading without much cost
+        const mkFill = (x, z) => {
+            const d = new THREE.DirectionalLight(0x87ceeb, 0.12);
+            d.position.set(x, 8, z);
+            d.castShadow = false;
+            scene.add(d);
+            fillLights.push(d);
+        };
+        mkFill(0, 20);    // North
+        mkFill(0, -20);   // South
+        mkFill(20, 0);    // East
+        mkFill(-20, 0);   // West
+    }
     
     // Fallback sky dome (disabled)
     let sky = null;

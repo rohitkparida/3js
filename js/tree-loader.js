@@ -4,7 +4,21 @@ export class TreeLoader {
         this.loader = null;
         this.trees = [];
         this.loadedModels = new Map();
+        this._rand = this.makeRng((typeof CONFIG !== 'undefined' && CONFIG.RANDOM && CONFIG.RANDOM.SEED) ? CONFIG.RANDOM.SEED : 12345);
     }
+    // Simple seeded RNG (Mulberry32)
+    makeRng(seed) {
+        let t = seed >>> 0;
+        return function() {
+            t += 0x6D2B79F5;
+            let r = Math.imul(t ^ t >>> 15, 1 | t);
+            r ^= r + Math.imul(r ^ r >>> 7, 61 | r);
+            return ((r ^ r >>> 14) >>> 0) / 4294967296;
+        };
+    }
+
+    rand() { return this._rand ? this._rand() : Math.random(); }
+
 
     init() {
         // Try to initialize GLTFLoader
@@ -156,16 +170,16 @@ export class TreeLoader {
             // Corner areas
             [-65, 65], [65, 65], [-65, -65], [65, -65]
         ];
-        // Apply light jitter to base positions
+        // Apply light jitter to base positions (seeded)
         treePositions = treePositions.map(([x, z]) => [
-            x + (Math.random() - 0.5) * 2,
-            z + (Math.random() - 0.5) * 2
+            x + (this.rand() - 0.5) * 2,
+            z + (this.rand() - 0.5) * 2
         ]);
 
         // Create a second set with a radial offset (so they don't sit as pairs)
         const extra = treePositions.map(([x, z]) => {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = 4 + Math.random() * 6; // 4–10 units away
+            const angle = this.rand() * Math.PI * 2;
+            const dist = 4 + this.rand() * 6; // 4–10 units away
             return [x + Math.cos(angle) * dist, z + Math.sin(angle) * dist];
         });
         treePositions = treePositions.concat(extra);
@@ -182,12 +196,12 @@ export class TreeLoader {
                 const dz = Math.abs(z - rz);
                 if (dz < halfRoad + safety) {
                     const dir = z >= rz ? 1 : -1;
-                    const push = (halfRoad + safety - dz) + 1 + Math.random();
+                    const push = (halfRoad + safety - dz) + 1 + this.rand();
                     z += dir * push;
                     // Enforce minimum offset after push
                     const afterDz = Math.abs(z - rz);
                     if (afterDz < minOffsetFromCenter) {
-                        z = rz + (z >= rz ? 1 : -1) * (minOffsetFromCenter + Math.random());
+                        z = rz + (z >= rz ? 1 : -1) * (minOffsetFromCenter + this.rand());
                     }
                 }
             }
@@ -196,21 +210,21 @@ export class TreeLoader {
                 const dx = Math.abs(x - rx);
                 if (dx < halfRoad + safety) {
                     const dir = x >= rx ? 1 : -1;
-                    const push = (halfRoad + safety - dx) + 1 + Math.random();
+                    const push = (halfRoad + safety - dx) + 1 + this.rand();
                     x += dir * push;
                     // Enforce minimum offset after push
                     const afterDx = Math.abs(x - rx);
                     if (afterDx < minOffsetFromCenter) {
-                        x = rx + (x >= rx ? 1 : -1) * (minOffsetFromCenter + Math.random());
+                        x = rx + (x >= rx ? 1 : -1) * (minOffsetFromCenter + this.rand());
                     }
                 }
             }
             // Clamp to map bounds (inside walls)
             const LIMIT = 68;
-            if (x > LIMIT) x = LIMIT - Math.random()*2;
-            if (x < -LIMIT) x = -LIMIT + Math.random()*2;
-            if (z > LIMIT) z = LIMIT - Math.random()*2;
-            if (z < -LIMIT) z = -LIMIT + Math.random()*2;
+            if (x > LIMIT) x = LIMIT - this.rand()*2;
+            if (x < -LIMIT) x = -LIMIT + this.rand()*2;
+            if (z > LIMIT) z = LIMIT - this.rand()*2;
+            if (z < -LIMIT) z = -LIMIT + this.rand()*2;
             return [x, z];
         });
 
@@ -236,7 +250,7 @@ export class TreeLoader {
                 if (dh < h.r) {
                     const nx = dxh === 0 && dzh === 0 ? 1 : dxh / (dh || 1);
                     const nz = dxh === 0 && dzh === 0 ? 0 : dzh / (dh || 1);
-                    const pushOut = (h.r - dh) + 0.75 + Math.random();
+                    const pushOut = (h.r - dh) + 0.75 + this.rand();
                     xi = h.x + nx * (h.r + pushOut);
                     zi = h.z + nz * (h.r + pushOut);
                 }
@@ -246,7 +260,7 @@ export class TreeLoader {
                 const dx = xi - xj, dz = zi - zj;
                 const d = Math.hypot(dx, dz);
                 if (d > 0 && d < minDist) {
-                    const push = (minDist - d) + 0.5 * Math.random();
+                    const push = (minDist - d) + 0.5 * this.rand();
                     const nx = dx / d, nz = dz / d;
                     xi += nx * push;
                     zi += nz * push;
@@ -254,16 +268,16 @@ export class TreeLoader {
             }
             // Clamp after adjustments
             const LIMIT = 68;
-            if (xi > LIMIT) xi = LIMIT - Math.random()*2;
-            if (xi < -LIMIT) xi = -LIMIT + Math.random()*2;
-            if (zi > LIMIT) zi = LIMIT - Math.random()*2;
-            if (zi < -LIMIT) zi = -LIMIT + Math.random()*2;
+            if (xi > LIMIT) xi = LIMIT - this.rand()*2;
+            if (xi < -LIMIT) xi = -LIMIT + this.rand()*2;
+            if (zi > LIMIT) zi = LIMIT - this.rand()*2;
+            if (zi < -LIMIT) zi = -LIMIT + this.rand()*2;
             treePositions[i] = [xi, zi];
         }
 
         // Shuffle to reduce visible pairing
         for (let i = treePositions.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(this.rand() * (i + 1));
             [treePositions[i], treePositions[j]] = [treePositions[j], treePositions[i]];
         }
         
@@ -272,7 +286,7 @@ export class TreeLoader {
         
         for (let i = 0; i < treePositions.length; i++) {
             const [x, z] = treePositions[i];
-            const size = Math.random() * 0.3 + 0.7;
+            const size = this.rand() * 0.3 + 0.7;
             
             console.log(`🔄 Creating tree ${i + 1}/${treePositions.length} at (${x}, ${z})`);
             
