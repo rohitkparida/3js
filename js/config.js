@@ -10,7 +10,7 @@ export const CONFIG = {
     
     // Renderer settings
     RENDERER: {
-        ANTIALIAS: true,
+        ANTIALIAS: false,
         ALPHA: true,
         SHADOW_MAP_SIZE: 2048,
         TONE_MAPPING_EXPOSURE: 1.2

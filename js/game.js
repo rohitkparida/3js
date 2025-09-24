@@ -19,6 +19,8 @@ export class Game {
         this.environmentManager = null;
         this.collisionDetector = null;
         this.isRunning = false;
+        this._lastShadowCharacterPos = new THREE.Vector3();
+        this._shadowRefreshFrames = 0;
     }
     
     async init() {
@@ -59,6 +61,60 @@ export class Game {
         // Create environment
         this.environmentManager = new EnvironmentManager(this.scene, this.world);
         await this.environmentManager.create();
+
+        // Ensure shadows are built after environment creation, then freeze
+        if (this.renderer && this.renderer.shadowMap) {
+            this.renderer.shadowMap.autoUpdate = true;
+            this.renderer.shadowMap.needsUpdate = true;
+            // Force two frames of shadow updates before freezing
+            requestAnimationFrame(() => {
+                if (!this.renderer || !this.renderer.shadowMap) return;
+                this.renderer.shadowMap.needsUpdate = true;
+                requestAnimationFrame(() => {
+                    if (!this.renderer || !this.renderer.shadowMap) return;
+                    this.renderer.shadowMap.autoUpdate = false;
+                });
+            });
+        }
+
+        // Mark large static groups as non-updating to save CPU
+        const markStatic = (node) => {
+            if (!node) return;
+            const process = (obj) => {
+                if (!obj) return;
+                if (!obj.matrixAutoUpdate) return;
+                const name = (obj.name || '').toLowerCase();
+                const isDynamic = name.includes('vehicle') || name.includes('car') || name.includes('reporter') || name.includes('mascot') || name.includes('character');
+                if (!isDynamic) {
+                    obj.matrixAutoUpdate = false;
+                    if (typeof obj.updateMatrix === 'function') obj.updateMatrix();
+                }
+            };
+            if (Array.isArray(node)) {
+                node.forEach((n) => markStatic(n));
+                return;
+            }
+            if (node.traverse && typeof node.traverse === 'function') {
+                node.traverse(process);
+                return;
+            }
+            if (node.children && Array.isArray(node.children)) {
+                node.children.forEach((c) => markStatic(c));
+                return;
+            }
+            // Fallback: single object
+            process(node);
+        };
+        markStatic(this.environmentManager.roads);
+        markStatic(this.environmentManager.buildings);
+        markStatic(this.environmentManager.trees);
+        // Archway and logo podium are in objects; mark non-dynamic ones
+        (this.environmentManager.objects || []).forEach(o => {
+            const n = (o && o.name || '').toLowerCase();
+            if (n.includes('logo_podium') || n.includes('north_archway')) {
+                markStatic(o);
+            }
+        });
         
         // Create collision detector
         this.collisionDetector = new CollisionDetector();
@@ -120,6 +176,18 @@ export class Game {
         
         // Update character
         this.characterController.update();
+
+        // Trigger brief shadow map refresh when the character moves
+        if (this.renderer && this.renderer.shadowMap && this.character) {
+            const p = this.character.position;
+            const moved = this._lastShadowCharacterPos.distanceToSquared(p) > 0.0025; // ~0.05 units
+            if (moved) {
+                this._lastShadowCharacterPos.copy(p);
+                this._shadowRefreshFrames = Math.max(this._shadowRefreshFrames, 2);
+                this.renderer.shadowMap.autoUpdate = true;
+                this.renderer.shadowMap.needsUpdate = true;
+            }
+        }
         
         // Update environment
         this.environmentManager.update();
@@ -139,6 +207,14 @@ export class Game {
         
         this.update();
         this.render();
+
+        // After rendering, if we scheduled a brief refresh, count it down
+        if (this.renderer && this.renderer.shadowMap && this._shadowRefreshFrames > 0) {
+            this._shadowRefreshFrames -= 1;
+            if (this._shadowRefreshFrames === 0) {
+                this.renderer.shadowMap.autoUpdate = false;
+            }
+        }
     }
     
     start() {

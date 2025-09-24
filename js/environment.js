@@ -470,7 +470,7 @@ export class EnvironmentManager {
                     } catch (_) {}
 
                     // Ground the reporter using a downward raycast onto terrain
-                    try { this.groundObject(model, minY); } catch (_) {}
+                    try { this.groundObject(model); } catch (_) {}
                     resolve(model);
                 },
                 undefined,
@@ -512,17 +512,21 @@ export class EnvironmentManager {
         return { x: target.x, z: target.z };
     }
 
-    // Raycast down from above the object to terrain and set y so base rests on ground
-    groundObject(object3d, baseOffset = 0) {
-        if (!this.terrainRef || !THREE || !THREE.Raycaster) return;
+    // Raycast down and align object's world AABB minY to ground hit (no double-lift)
+    groundObject(object3d) {
+        if (!THREE || !THREE.Raycaster) return;
         const rayOrigin = new THREE.Vector3(object3d.position.x, (object3d.position.y || 0) + 50, object3d.position.z);
-        const rayDir = new THREE.Vector3(0, -1, 0);
-        const raycaster = new THREE.Raycaster(rayOrigin, rayDir, 0, 200);
-        const targets = Array.isArray(this.terrainRef) ? this.terrainRef : [this.terrainRef];
+        const raycaster = new THREE.Raycaster(rayOrigin, new THREE.Vector3(0, -1, 0), 0, 200);
+        // Prefer podium/terrain/roads as hit targets
+        const targets = [];
+        if (this.scene) targets.push(this.scene);
         const hits = raycaster.intersectObjects(targets, true);
         if (hits && hits.length) {
             const groundY = hits[0].point.y;
-            object3d.position.y = groundY - baseOffset + 0.02;
+            const boxWorld = new THREE.Box3().setFromObject(object3d);
+            const currentMinY = boxWorld.min.y;
+            const delta = (groundY + 0.02) - currentMinY;
+            object3d.position.y += delta;
         }
     }
 }
