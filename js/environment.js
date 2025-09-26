@@ -661,21 +661,27 @@ export class EnvironmentManager {
                         }
                     });
 
-                    // Scale to reasonable size (adjust as needed)
+                    // Scale to reasonable size (make it bigger)
                     const box = new THREE.Box3().setFromObject(fountain);
                     const size = box.getSize(new THREE.Vector3());
                     const height = Math.max(0.0001, size.y);
-                    const targetHeight = 3.0; // make fountain visible
+                    const targetHeight = 8.0; // make fountain much more visible
                     const s = targetHeight / height;
                     fountain.scale.setScalar(s);
 
-                    // Recenter and position
+                    // Recenter and position at ground level
                     const box2 = new THREE.Box3().setFromObject(fountain);
                     const center = box2.getCenter(new THREE.Vector3());
                     fountain.position.sub(center);
+                    // Position at ground level first
                     fountain.position.set(pos.x, 0, pos.z);
+                    
+                    // Ground the fountain by moving it down to touch terrain
+                    const box3 = new THREE.Box3().setFromObject(fountain);
+                    const minY = box3.min.y;
+                    fountain.position.y = -minY; // Set fountain base at ground level
 
-                    // Place near nearest road but not on it
+                    // Place near nearest road but not on it  
                     try {
                         const safePos = this.placeNearNearestRoad(fountain, { x: pos.x, z: pos.z }, 2.0);
                         if (safePos) { 
@@ -684,8 +690,16 @@ export class EnvironmentManager {
                         }
                     } catch (_) {}
 
-                    // Ground the fountain
-                    try { this.groundObject(fountain); } catch (_) {}
+                    // Final grounding using raycast to terrain
+                    try { 
+                        this.groundObject(fountain);
+                        // Recalculate and ensure it's properly sitting on ground
+                        const finalBox = new THREE.Box3().setFromObject(fountain);
+                        const finalMinY = finalBox.min.y;
+                        if (finalMinY > 0) {
+                            fountain.position.y -= finalMinY - 0.1; // Slight offset into ground
+                        }
+                    } catch (_) {}
 
                     fountain.name = 'animated_fountain';
                     console.log(`⛲ Fountain placed at (${fountain.position.x.toFixed(2)}, ${fountain.position.z.toFixed(2)})`);
