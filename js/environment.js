@@ -659,53 +659,38 @@ export class EnvironmentManager {
                             child.castShadow = true;
                             child.receiveShadow = true;
                             
-                                // Hide grass/terrain components but PRESERVE water
+                                // Only hide components with very specific grass/ground naming
                                 if (child.material) {
                                     const matName = child.material.name ? child.material.name.toLowerCase() : '';
                                     const nodeName = child.name ? child.name.toLowerCase() : '';
                                     
-                                    // NEVER hide water components - check for water first
-                                    const isWaterComponent = () => {
-                                        return matName.includes('water') || matName.includes('liquid') ||
-                                               nodeName.includes('water') || nodeName.includes('liquid') ||
-                                               matName.includes('flow') || nodeName.includes('flow');
-                                    };
-                                    
-                                    if (isWaterComponent()) {
-                                        // Preserve all water components
-                                        console.log(`💧 Keeping water component: ${child.name || 'unnamed'}`);
-                                        return;
-                                    }
-                                    
-                                    // Only hide non-water grass/ground components
-                                    const isGrassComponent = () => {
-                                        return (matName.includes('grass') || matName.includes('ground') || 
-                                               matName.includes('floor') || matName.includes('terrain')) &&
-                                               !matName.includes('water') && !matName.includes('liquid');
-                                    };
-                                    
-                                    const isGrassByName = () => {
-                                        return (nodeName.includes('grass') || nodeName.includes('ground')) &&
-                                               !nodeName.includes('water') && !nodeName.includes('liquid');
-                                    };
-                                    
-                                    // Simple color check for ground (avoid water blue colors)
-                                    const looksLikeGround = (material) => {
-                                        if (!material.color) return false;
-                                        const rgb = { r: material.color.r, g: material.color.g, b: material.color.b };
-                                        const isGreen = rgb.g > rgb.r && rgb.g > rgb.b && rgb.g > 0.3;
-                                        const isBrown = rgb.r > 0.4 && rgb.g > 0.2 && rgb.g < rgb.r && rgb.b < rgb.g;
-                                        const isBlue = rgb.b > rgb.r && rgb.b > rgb.g && rgb.b > 0.3;
+                                    // Only hide if explicitly named as grass or ground (be very conservative)
+                                    const shouldHide = (() => {
+                                        // Only hide if it has ground/grass in name AND not water
+                                        if (nodeName && (
+                                            (nodeName.includes('grass') && !nodeName.includes('water')) ||
+                                            (nodeName.includes('ground') && !nodeName.includes('water')) ||
+                                            (nodeName.includes('terrain') && !nodeName.includes('water')) ||
+                                            (nodeName.includes('floor') && !nodeName.includes('water'))
+                                        )) {
+                                            return true;
+                                        }
                                         
-                                        // Don't hide blue materials (likely water)
-                                        if (isBlue) return false;
-                                        return isGreen || isBrown;
-                                    };
+                                        if (matName && (
+                                            (matName.includes('grass') && !matName.includes('water')) ||
+                                            (matName.includes('ground') && !matName.includes('water')) ||
+                                            (matName.includes('terrain') && !matName.includes('water')) ||
+                                            (matName.includes('floor') && !matName.includes('water'))
+                                        )) {
+                                            return true;
+                                        }
+                                        
+                                        return false; // Default: don't hide anything else
+                                    })();
                                     
-                                    // Hide only definite ground/grass components
-                                    if (isGrassComponent() || isGrassByName() || looksLikeGround(child.material)) {
+                                    if (shouldHide) {
                                         child.visible = false;
-                                        console.log(`🌱 Hid grass component: ${child.name || 'unnamed'}`);
+                                        console.log(`🌱 Hid ground component: ${child.name || 'unnamed'}`);
                                     }
                                 }
                         }
