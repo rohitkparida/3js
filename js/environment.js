@@ -653,46 +653,11 @@ export class EnvironmentManager {
                         console.log(`🎬 Fountain animations loaded: ${gltf.animations.length} clips`);
                     }
 
-                    // Enable shadows and hide any grass/terrain components from the GLB
+                    // Enable shadows
                     fountain.traverse((child) => {
                         if (child.isMesh) {
                             child.castShadow = true;
                             child.receiveShadow = true;
-                            
-                                // Only hide components with very specific grass/ground naming
-                                if (child.material) {
-                                    const matName = child.material.name ? child.material.name.toLowerCase() : '';
-                                    const nodeName = child.name ? child.name.toLowerCase() : '';
-                                    
-                                    // Only hide if explicitly named as grass or ground (be very conservative)
-                                    const shouldHide = (() => {
-                                        // Only hide if it has ground/grass in name AND not water
-                                        if (nodeName && (
-                                            (nodeName.includes('grass') && !nodeName.includes('water')) ||
-                                            (nodeName.includes('ground') && !nodeName.includes('water')) ||
-                                            (nodeName.includes('terrain') && !nodeName.includes('water')) ||
-                                            (nodeName.includes('floor') && !nodeName.includes('water'))
-                                        )) {
-                                            return true;
-                                        }
-                                        
-                                        if (matName && (
-                                            (matName.includes('grass') && !matName.includes('water')) ||
-                                            (matName.includes('ground') && !matName.includes('water')) ||
-                                            (matName.includes('terrain') && !matName.includes('water')) ||
-                                            (matName.includes('floor') && !matName.includes('water'))
-                                        )) {
-                                            return true;
-                                        }
-                                        
-                                        return false; // Default: don't hide anything else
-                                    })();
-                                    
-                                    if (shouldHide) {
-                                        child.visible = false;
-                                        console.log(`🌱 Hid ground component: ${child.name || 'unnamed'}`);
-                                    }
-                                }
                         }
                     });
 
@@ -711,9 +676,8 @@ export class EnvironmentManager {
                     // Position at ground level first
                     fountain.position.set(pos.x, 0, pos.z);
                     
-                    // Ground the fountain - force to terrain level
-                    const groundBox = new THREE.Box3().setFromObject(fountain);
-                    fountain.position.y = -groundBox.min.y; // Place base at ground level (Y = 0)
+                    // Move fountain 1 unit down to hide any grass components underneath terrain
+                    fountain.position.y = -1;
 
                     // Place near nearest road but not on it  
                     try {
