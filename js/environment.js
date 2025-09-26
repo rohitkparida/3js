@@ -665,6 +665,23 @@ export class EnvironmentManager {
                                 const matName = child.material.name ? child.material.name.toLowerCase() : '';
                                 const nodeName = child.name ? child.name.toLowerCase() : '';
                                 
+                                // Helper function to detect ground/grass materials by color characteristics
+                                const lookLikeGroundMaterial = (material) => {
+                                    if (!material.color) return false;
+                                    
+                                    const color = material.color;
+                                    const rgb = { r: color.r, g: color.g, b: color.b };
+                                    
+                                    // Check if it's greenish (grass-like) or brownish (dirt-like)
+                                    const isGreen = rgb.g > rgb.r && rgb.g > rgb.b && rgb.g > 0.3;
+                                    const isBrown = rgb.r > 0.4 && rgb.g > 0.2 && rgb.g < rgb.r && rgb.b < rgb.g;
+                                    
+                                    // Check for low roughness (typical of hard surfaces vs vegetation) - but we want to catch grass
+                                    const lowRoughness = 'roughness' in material && material.roughness < 0.3;
+                                    
+                                    return isGreen || isBrown || lowRoughness;
+                                };
+                                
                                 // If it looks like ground/grass material, hide it
                                 if (matName.includes('grass') || matName.includes('ground') || 
                                     matName.includes('floor') || matName.includes('terrain') ||
@@ -722,22 +739,5 @@ export class EnvironmentManager {
                 () => resolve(null)
             );
         });
-    }
-
-    // Helper function to detect ground/grass materials by color characteristics
-    lookLikeGroundMaterial(material) {
-        if (!material.color) return false;
-        
-        const color = material.color;
-        const rgb = { r: color.r, g: color.g, b: color.b };
-        
-        // Check if it's greenish (grass-like) or brownish (dirt-like)
-        const isGreen = rgb.g > rgb.r && rgb.g > rgb.b && rgb.g > 0.3;
-        const isBrown = rgb.r > 0.4 && rgb.g > 0.2 && rgb.g < rgb.r && rgb.b < rgb.g;
-        
-        // Check for low roughness (typical of hard surfaces vs vegetation) - but we want to catch grass
-        const lowRoughness = 'roughness' in material && material.roughness < 0.3;
-        
-        return isGreen || isBrown || lowRoughness;
     }
 }
