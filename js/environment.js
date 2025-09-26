@@ -124,7 +124,7 @@ export class EnvironmentManager {
 
         // Add animated fountain near spawn
         try {
-            const fountain = await this.loadAndPlaceFountain('models/fountain.glb', { x: 8, z: 8 });
+            const fountain = await this.loadAndPlaceFountain('models/fountain.glb', { x: 10, z: 8 });
             if (fountain) {
                 this.scene.add(fountain);
                 this.objects.push(fountain);
@@ -691,7 +691,7 @@ export class EnvironmentManager {
 
                     // Ground fountain and move 1 unit down to hide grass part in model
                     const groundingBox = new THREE.Box3().setFromObject(fountain);
-                    fountain.position.y = -groundingBox.min.y - 1; // Base at ground then 1 unit down to hide grass
+                    fountain.position.y = -groundingBox.min.y - 0.01; // Base at ground then 1 unit down to hide grass
                     
                     // Ensure fountain base is still at reasonable ground level (1 unit below)
                     if (fountain.position.y > 0) {
