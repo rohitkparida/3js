@@ -669,8 +669,16 @@ export class EnvironmentManager {
                     const s = targetHeight / height;
                     fountain.scale.setScalar(s);
 
-                    // Position fountain near spawn point
+                    // Recenter and position at ground level
+                    const box2 = new THREE.Box3().setFromObject(fountain);
+                    const center = box2.getCenter(new THREE.Vector3());
+                    fountain.position.sub(center);
+                    // Position at ground level first
                     fountain.position.set(pos.x, 0, pos.z);
+                    
+                    // Ground the fountain - force to terrain level
+                    const groundBox = new THREE.Box3().setFromObject(fountain);
+                    fountain.position.y = -groundBox.min.y; // Place base at ground level (Y = 0)
 
                     // Place near nearest road but not on it  
                     try {
@@ -681,9 +689,14 @@ export class EnvironmentManager {
                         }
                     } catch (_) {}
 
-                    // Grounding: Place base at ground level (Y=0) but move it down 1 unit to hide grass components
-                    const groundBox = new THREE.Box3().setFromObject(fountain);
-                    fountain.position.y = -groundBox.min.y - 1; // Base at Y=0, but hidden offset for grass
+                    // Ground fountain and move 1 unit down to hide grass part in model
+                    const groundingBox = new THREE.Box3().setFromObject(fountain);
+                    fountain.position.y = -groundingBox.min.y - 1; // Base at ground then 1 unit down to hide grass
+                    
+                    // Ensure fountain base is still at reasonable ground level (1 unit below)
+                    if (fountain.position.y > 0) {
+                        fountain.position.y = -1; // Fallback to 1 unit below ground
+                    }
 
                     fountain.name = 'animated_fountain';
                     console.log(`⛲ Fountain placed at (${fountain.position.x.toFixed(2)}, ${fountain.position.z.toFixed(2)})`);
