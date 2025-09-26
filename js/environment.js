@@ -33,6 +33,9 @@ export class EnvironmentManager {
         // Keep a reference for grounding raycasts
         this.terrainRef = terrain;
         
+        // Hide grass/terrain near fountain to avoid glitches
+        this.hideGrassNearFountain(terrain);
+        
         // Create clean road network
         this.roads = createCleanRoadNetwork();
         this.roads.forEach(road => this.scene.add(road));
@@ -706,5 +709,72 @@ export class EnvironmentManager {
                 () => resolve(null)
             );
         });
+    }
+
+    // Hide the grass/terrain around the fountain area to prevent glitches
+    hideGrassNearFountain(terrain) {
+        if (!terrain) return;
+        
+        // Make terrain transparent or invisible around fountain position (x: 8, z: 8)
+        const fountainX = 8;
+        const fountainZ = 8;
+        const clearRadius = 10; // Area to clear
+        
+        // Get terrain geometry
+        if (terrain.children && terrain.children.length > 0) {
+            terrain.children.forEach(child => {
+                if (child.isMesh) {
+                    // Set material to invisible by making it fully transparent
+                    if (child.material) {
+                        child.material.transparent = true;
+                        child.material.opacity = 0; // Make grass invisible near fountain
+                        // Optionally test if position is near fountain to selectively hide
+                        const objPos = child.position;
+                        const distance = Math.sqrt(Math.pow(objPos.x - fountainX, 2) + Math.pow(objPos.z - fountainZ, 2));
+                        if (distance <= clearRadius) {
+                            child.visible = false; // Hide this terrain piece
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Also hide any geometry on the main terrain mesh if possible
+        if (terrain.geometry && terrain.material) {
+            // Make terrain transparent in the fountain area
+            terrain.material.transparent = true;
+            // Create invisible patch at fountain location
+            this.createGrassPatchAroundFountain(terrain);
+        }
+    }
+
+    // Create invisible grass patch to replace visible glitchy area 
+    createGrassPatchAroundFountain(terrain) {
+        if (!THREE) return;
+        
+        try {
+            // Position ~8, ~8 where fountain will be placed
+            const clearRadius = 8;
+            const fountainPos = { x: 8, z: 8 };
+            
+            // Create smaller invisible patch to replace the glitchy area
+            const patchGeometry = new THREE.PlaneGeometry(clearRadius * 2, clearRadius * 2);
+            patchGeometry.rotateX(-Math.PI / 2);
+            const invisibleMaterial = new THREE.MeshLambertMaterial({
+                color: 0x000000,
+                transparent: true,
+                opacity: 0,
+                side: THREE.DoubleSide
+            });
+            
+            const patch = new THREE.Mesh(patchGeometry, invisibleMaterial);
+            patch.position.set(fountainPos.x, 0.01, fountainPos.z);
+            patch.name = 'fountain-grass-patch';
+            terrain.add(patch);
+            
+            console.log('🌱 Hidden grass area around fountain at (8, 8)');
+        } catch (ex) {
+            // If there's an error with terrain modification, continue silently
+        }
     }
 }
