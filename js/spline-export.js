@@ -66,29 +66,109 @@ export class SplineExporter {
      * Prepare scene data for optimal Spline compatibility
      */
     prepareSceneForExport(options = {}) {
-        let exportScene;
+        const exportScene = new THREE.Scene();
         
-        if (options.fullScene !== false) {
-            // Clone the entire scene
-            exportScene = this.scene.clone();
-        } else {
-            // Export only specific objects
-            exportScene = new THREE.Scene();
-            exportScene.copy(this.scene);
-            
-            if (options.objects) {
-                // Filter objects to export specific ones
-                options.objects.forEach(objName => {
-                    const obj = this.scene.getObjectByName(objName);
-                    if (obj) exportScene.add(obj.clone());
-                });
+        // Copy basic scene properties (ignore physics/references)
+        exportScene.background = this.scene.background;
+        exportScene.fog = this.scene.fog;
+        
+        // Add objects manually to avoid circular references
+        // Only process direct children of scene first
+        this.scene.children.forEach(child => {
+            if (this.shouldIncludeObject(child)) {
+                const cleanClone = this.cleanObjectForExport(child);
+                if (cleanClone) {
+                    exportScene.add(cleanClone);
+                }
             }
-        }
+        });
 
         // Enable optimal rendering for Spline
         this.optimizeForSpline(exportScene);
         
         return exportScene;
+    }
+
+    /**
+     * Check if object should be included in export
+     */
+    shouldIncludeObject(child) {
+        // Skip cameras (except if explicitly meant for export)
+        if (child.type === 'Camera') {
+            return false;
+        }
+        
+        // Skip empty groups 
+        if (child.isGroup && child.children.length === 0) {
+            return false;
+        }
+        
+        // Only include meshes and groups with actual content
+        return child.isMesh || (child.isGroup && child.children.length > 0);
+    }
+
+    /**
+     * Clone object safely for export, removing physics and circular refs
+     */
+    cleanObjectForExport(obj) {
+        // Only export visual mesh objects and groups
+        if (!(obj.isMesh || obj.isGroup || obj.isLight)) {
+            return null;
+        }
+        
+        try {
+            // Create new object without cloning to avoid circular refs
+            let cleanObj;
+            
+            if (obj.isMesh) {
+                // Clean geometry/material references
+                const geometry = obj.geometry ? obj.geometry.clone() : new THREE.BoxGeometry(1, 1, 1);
+                let material = new THREE.MeshBasicMaterial({ color: 0x888888 });
+                
+                if (obj.material) {
+                    // Create basic material similar to original
+                    material = new THREE.MeshBasicMaterial({
+                        color: obj.material.color || 0x888888,
+                        transparent: obj.material.transparent || false,
+                        opacity: obj.material.opacity || 1,
+                    });
+                }
+                
+                cleanObj = new THREE.Mesh(geometry, material);
+                
+            } else if (obj.isGroup) {
+                cleanObj = new THREE.Group();
+                
+            } else {
+                // Don't export if can't safely re-create
+                return null;
+            }
+
+            // Copy essential properties safely
+            if (obj.position) cleanObj.position.copy(obj.position);
+            if (obj.rotation) cleanObj.rotation.copy(obj.rotation);
+            if (obj.scale) cleanObj.scale.copy(obj.scale);
+            
+            cleanObj.name = obj.name || `${obj.type.toLowerCase()}_${Math.random().toString(36).substr(2, 5)}`;
+
+            // Add children for groups only (avoid traversing mesh children)
+            if (obj.isGroup && obj.children) {
+                obj.children.forEach(child => {
+                    if (child.isMesh || child.isGroup) {
+                        const childClean = this.cleanObjectForExport(child);
+                        if (childClean) {
+                            cleanObj.add(childClean);
+                        }
+                    }
+                });
+            }
+
+            return cleanObj;
+            
+        } catch (error) {
+            console.warn('Skipping problematic object during export:', obj.name, error);
+            return null;
+        }
     }
 
     /**
