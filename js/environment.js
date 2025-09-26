@@ -676,8 +676,9 @@ export class EnvironmentManager {
                     // Position at ground level first
                     fountain.position.set(pos.x, 0, pos.z);
                     
-                    // Move fountain 1 unit down to hide any grass components underneath terrain
-                    fountain.position.y = -1;
+                    // Position fountain: -1 for grass hiding, then adjust so base touches ground
+                    const box = new THREE.Box3().setFromObject(fountain);
+                    fountain.position.y = -1 - box.min.y; // -1 to hide grass, then offset back up by bottom height
 
                     // Place near nearest road but not on it  
                     try {
