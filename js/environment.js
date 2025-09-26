@@ -669,16 +669,8 @@ export class EnvironmentManager {
                     const s = targetHeight / height;
                     fountain.scale.setScalar(s);
 
-                    // Recenter and position at ground level
-                    const box2 = new THREE.Box3().setFromObject(fountain);
-                    const center = box2.getCenter(new THREE.Vector3());
-                    fountain.position.sub(center);
-                    // Position at ground level first
+                    // Position fountain near spawn point
                     fountain.position.set(pos.x, 0, pos.z);
-                    
-                    // Position fountain: -1 for grass hiding, then adjust so base touches ground
-                    const box = new THREE.Box3().setFromObject(fountain);
-                    fountain.position.y = -1 - box.min.y; // -1 to hide grass, then offset back up by bottom height
 
                     // Place near nearest road but not on it  
                     try {
@@ -689,14 +681,9 @@ export class EnvironmentManager {
                         }
                     } catch (_) {}
 
-                    // Guarantee fountain is grounded - set base to exact Y=0
-                    const groundingBox = new THREE.Box3().setFromObject(fountain);
-                    fountain.position.y = -groundingBox.min.y; // Force base at terrain level
-                    
-                    // Safety fallback - ensure fountain never appears to float
-                    if (fountain.position.y < 0) {
-                        fountain.position.y = Math.abs(groundingBox.min.y);
-                    }
+                    // Grounding: Place base at ground level (Y=0) but move it down 1 unit to hide grass components
+                    const groundBox = new THREE.Box3().setFromObject(fountain);
+                    fountain.position.y = -groundBox.min.y - 1; // Base at Y=0, but hidden offset for grass
 
                     fountain.name = 'animated_fountain';
                     console.log(`⛲ Fountain placed at (${fountain.position.x.toFixed(2)}, ${fountain.position.z.toFixed(2)})`);
