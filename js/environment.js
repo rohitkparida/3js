@@ -23,6 +23,7 @@ export class EnvironmentManager {
         this.roads = [];
         this.buildings = [];
         this.boundaryWalls = [];
+        this.animations = [];
     }
     
     async create() {
@@ -121,6 +122,15 @@ export class EnvironmentManager {
             }
         } catch (_) {}
 
+        // Add animated fountain near spawn
+        try {
+            const fountain = await this.loadAndPlaceFountain('models/fountain.glb', { x: 8, z: 8 });
+            if (fountain) {
+                this.scene.add(fountain);
+                this.objects.push(fountain);
+            }
+        } catch (_) {}
+
         // Create boundary walls
         this.boundaryWalls = createBoundaryWalls(this.scene, this.world);
         
@@ -169,6 +179,18 @@ export class EnvironmentManager {
                 if (canopy) {
                     canopy.rotation.z = Math.sin(time * 0.5 + index) * 0.1;
                 }
+            }
+        });
+
+        // Update all animations (like fountain animations)
+        if (!this.lastAnimationTime) {
+            this.lastAnimationTime = Date.now() * 0.001;
+        }
+        const deltaTime = (Date.now() * 0.001) - this.lastAnimationTime;
+        this.lastAnimationTime = Date.now() * 0.001;
+        this.animations.forEach((mixer) => {
+            if (mixer) {
+                mixer.update(deltaTime);
             }
         });
     }
@@ -606,5 +628,72 @@ export class EnvironmentManager {
             const delta = (groundY + 0.02) - currentMinY;
             object3d.position.y += delta;
         }
+    }
+
+    // Load animated fountain and place near spawn but off road
+    async loadAndPlaceFountain(url, pos = { x: 0, z: 0 }) {
+        return new Promise((resolve) => {
+            if (!THREE || !THREE.GLTFLoader) return resolve(null);
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                url,
+                (gltf) => {
+                    const fountain = gltf.scene || gltf.scenes?.[0];
+                    if (!fountain) return resolve(null);
+
+                    // Store animations if available
+                    this.animations = this.animations || [];
+                    if (gltf.animations && gltf.animations.length > 0) {
+                        fountain.userData.mixer = new THREE.AnimationMixer(fountain);
+                        gltf.animations.forEach((clip) => {
+                            const action = fountain.userData.mixer.clipAction(clip);
+                            action.play();
+                        });
+                        this.animations.push(fountain.userData.mixer);
+                        console.log(`🎬 Fountain animations loaded: ${gltf.animations.length} clips`);
+                    }
+
+                    // Enable shadows
+                    fountain.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+
+                    // Scale to reasonable size (adjust as needed)
+                    const box = new THREE.Box3().setFromObject(fountain);
+                    const size = box.getSize(new THREE.Vector3());
+                    const height = Math.max(0.0001, size.y);
+                    const targetHeight = 3.0; // make fountain visible
+                    const s = targetHeight / height;
+                    fountain.scale.setScalar(s);
+
+                    // Recenter and position
+                    const box2 = new THREE.Box3().setFromObject(fountain);
+                    const center = box2.getCenter(new THREE.Vector3());
+                    fountain.position.sub(center);
+                    fountain.position.set(pos.x, 0, pos.z);
+
+                    // Place near nearest road but not on it
+                    try {
+                        const safePos = this.placeNearNearestRoad(fountain, { x: pos.x, z: pos.z }, 2.0);
+                        if (safePos) { 
+                            fountain.position.x = safePos.x; 
+                            fountain.position.z = safePos.z; 
+                        }
+                    } catch (_) {}
+
+                    // Ground the fountain
+                    try { this.groundObject(fountain); } catch (_) {}
+
+                    fountain.name = 'animated_fountain';
+                    console.log(`⛲ Fountain placed at (${fountain.position.x.toFixed(2)}, ${fountain.position.z.toFixed(2)})`);
+                    resolve(fountain);
+                },
+                undefined,
+                () => resolve(null)
+            );
+        });
     }
 }
