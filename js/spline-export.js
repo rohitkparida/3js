@@ -23,27 +23,35 @@ export class SplineExporter {
         // Prepare scene for export
         const exportData = this.prepareSceneForExport(options);
         
-        // Export options
+        // Export options  
         const exportOptions = {
-            trs: true, // Include transform, rotation, scale
+            binary: true,
+            trs: true,
+            includeCustomExtensions: false,
             onlyVisible: options.onlyVisible || false,
-            binary: true, // GLB format
-            includeCustomExtensions: true,
-            ...options
         };
 
         return new Promise((resolve, reject) => {
             this.exporter.parse(
                 exportData,
                 (result) => {
-                    console.log('✅ GLTF export completed');
+                    console.log('✅ GLTF export completed.');
+                    console.log('📄 Export result details:', Object.keys(result || {}));
+                    console.log('🔍 Export type:', typeof result, result instanceof ArrayBuffer);
+                    
+                    if (!result || (typeof result === 'object' && Object.keys(result).length === 0)) {
+                        reject(new Error('Empty export result'));
+                        return;
+                    }
+                    
                     this.downloadGLTF(result, metadata.name);
                     resolve(result);
                 },
                 (error) => {
                     console.error('❌ Export failed:', error);
                     reject(error);
-                }
+                },
+                exportOptions
             );
         });
     }
@@ -258,20 +266,47 @@ export class SplineExporter {
      * Download GLTF/GLB file
      */
     downloadGLTF(gltfData, filename) {
-        const blob = new Blob([gltfData], { type: 'model/gltf-binary' });
+        // Handle binary GLB properly
+        try {
+            if (gltfData instanceof ArrayBuffer || gltfData instanceof Uint8Array) {
+                // Binary GLB data (preferred)
+                const blob = new Blob([gltfData], { type: 'model/gltf-binary' });
+                this.downloadFile(blob, `${filename}.glb`);
+                console.log(`📁 Downloaded: ${filename}.glb`);
+                
+            } else if (gltfData && typeof gltfData === 'object') {
+                // JSON GLTF 
+                try {
+                    const jsonString = JSON.stringify(gltfData, null, 2);
+                    const blob = new Blob([jsonString], { type: 'model/gltf+json' });
+                    this.downloadFile(blob, `${filename}.gltf`);
+                    console.log(`📁 Downloaded: ${filename}.gltf`);
+                } catch (jsonError) {
+                    console.error('Cannot stringify GLTF data:', jsonError, gltfData);
+                    alert('Export data corrupted. Check console.');
+                    return;
+                }
+            } else {
+                console.error('Invalid GLTF export format:', typeof gltfData, gltfData);
+                return;
+            }
+            
+        } catch (error) {
+            console.error('Failed to download GLTF:', error);
+            alert('Downloading failed. Check console writes.');
+        }
+    }
+    
+    downloadFile(blob, filename) {
         const url = URL.createObjectURL(blob);
-        
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = `${filename}.glb`;
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
-        
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        
-        console.log(`📁 Downloaded: ${filename}.glb`);
     }
 
     /**
