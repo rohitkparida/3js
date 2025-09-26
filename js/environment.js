@@ -124,7 +124,7 @@ export class EnvironmentManager {
 
         // Add animated fountain near spawn
         try {
-            const fountain = await this.loadAndPlaceFountain('models/fountain.glb', { x: 10, z: 8 });
+            const fountain = await this.loadAndPlaceFountain('models/fountain.glb', { x: 7, z: 7 });
             if (fountain) {
                 this.scene.add(fountain);
                 this.objects.push(fountain);
