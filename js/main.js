@@ -1,5 +1,14 @@
 import { initGame } from './game.js';
 
+// Performance optimizations
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {
+            // Silent fail - SW not critical for this demo
+        });
+    });
+}
+
 // Initialize the game when the page loads
 document.addEventListener('DOMContentLoaded', async () => {
     const overlay = document.getElementById('loading-overlay');

@@ -61,19 +61,96 @@ function addTerrainDetails(terrain) {
         }
     }
     
-    // Add a few rocks in organized clusters
-    const rockClusters = [
-        { x: -30, z: -30, count: 3 },
-        { x: 30, z: 30, count: 3 },
-        { x: -20, z: 40, count: 2 },
-        { x: 40, z: -20, count: 2 }
+    // Grid-based rock placement to ensure proper spacing
+    const gridSize = 15; // Minimum distance between rocks
+    const grid = [];
+    
+    // Function to check if a position is valid (not too close to other rocks or roads)
+    function isValidPosition(x, z) {
+        // Check against roads
+        for (const rz of primaryZ) {
+            if (Math.abs(z - rz) < rockClearance + 2) return false;
+        }
+        for (const rx of primaryX) {
+            if (Math.abs(x - rx) < rockClearance + 2) return false;
+        }
+        
+        // Check against other rocks
+        const gridX = Math.round(x / gridSize) * gridSize;
+        const gridZ = Math.round(z / gridSize) * gridSize;
+        
+        if (grid[`${gridX},${gridZ}`]) return false;
+        
+        // Mark this grid cell as occupied
+        grid[`${gridX},${gridZ}`] = true;
+        return true;
+    }
+    
+    // Generate rock positions using grid system
+    const rockPositions = [];
+    const mapSize = 70; // Half of map size
+    const minDistanceFromCenter = 15; // Don't place rocks too close to center
+    
+    // Try to place 9 rocks with proper spacing
+    let attempts = 0;
+    const maxAttempts = 100;
+    
+    while (rockPositions.length < 9 && attempts < maxAttempts) {
+        attempts++;
+        
+        // Generate position in a ring around the center
+        const angle = Math.random() * Math.PI * 2;
+        const distance = minDistanceFromCenter + Math.random() * (mapSize - minDistanceFromCenter - 5);
+        let x = Math.cos(angle) * distance;
+        let z = Math.sin(angle) * distance;
+        
+        // Snap to grid for better spacing
+        x = Math.round(x / 2) * 2; // Snap to even coordinates
+        z = Math.round(z / 2) * 2;
+        
+        if (isValidPosition(x, z)) {
+            rockPositions.push({ x, z });
+        }
+    }
+    
+    // If we couldn't place enough rocks, add some at fixed positions
+    const fallbackPositions = [
+        { x: -30, z: 30 },
+        { x: 30, z: 30 },
+        { x: -30, z: -30 },
+        { x: 30, z: -30 },
+        { x: 0, z: 40 },
+        { x: 0, z: -40 },
+        { x: 40, z: 0 },
+        { x: -40, z: 0 },
+        { x: 40, z: 40 }
     ];
+    
+    // Add fallback positions if needed
+    for (const pos of fallbackPositions) {
+        if (rockPositions.length >= 9) break;
+        if (isValidPosition(pos.x, pos.z)) {
+            rockPositions.push(pos);
+        }
+    }
+    
+    // Convert positions to cluster format
+    const rockClusters = rockPositions.map(pos => ({
+        x: pos.x,
+        z: pos.z,
+        count: 1
+    }));
+    
+    // No position variance - exact placement
+    const positionVariance = 0;
     
     rockClusters.forEach(cluster => {
         for (let i = 0; i < cluster.count; i++) {
             const rock = createRock();
-            const offsetX = (Math.random() - 0.5) * 8;
-            const offsetZ = (Math.random() - 0.5) * 8;
+            // Use smaller variance for optimized positions
+            // Use exact positions with no variance
+            const offsetX = 0;
+            const offsetZ = 0;
             rock.position.set(cluster.x + offsetX, 0.05, cluster.z + offsetZ);
             clampAwayFromRoads(rock.position);
             detailGroup.add(rock);

@@ -183,7 +183,7 @@ export class CharacterController {
         if (typeof CANNON !== 'undefined' && this.characterBody) {
             // Physics-driven movement: set body velocity, sync mesh from body
             const desiredVelocity = { x: 0, z: 0 };
-            const speed = CONFIG.CHARACTER.MOVE_SPEED * 30; // faster traversal
+            const speed = CONFIG.CHARACTER.MOVE_SPEED * 20; // faster traversal
             if (this.keys.w) desiredVelocity.z -= speed;
             if (this.keys.s) desiredVelocity.z += speed;
             if (this.keys.a) desiredVelocity.x -= speed;
@@ -218,6 +218,7 @@ export class CharacterController {
                 this.characterBody.position.y,
                 this.characterBody.position.z
             );
+            
             
         } else {
             // Fallback movement without physics

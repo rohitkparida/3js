@@ -5,6 +5,7 @@ import { createCharacter, CharacterController } from './character.js';
 import { CameraController } from './camera.js';
 import { EnvironmentManager } from './environment.js';
 import { CollisionDetector } from './collision-detection.js';
+import { Performance } from './performance.js';
 
 // Main game class
 export class Game {
@@ -18,6 +19,7 @@ export class Game {
         this.cameraController = null;
         this.environmentManager = null;
         this.collisionDetector = null;
+        this.performance = null;
         this.isRunning = false;
         this._lastShadowCharacterPos = new THREE.Vector3();
         this._shadowRefreshFrames = 0;
@@ -33,6 +35,9 @@ export class Game {
         // Create renderer
         const canvas = document.getElementById('canvas');
         this.renderer = createRenderer(canvas);
+        
+        // Create performance monitor
+        this.performance = new Performance();
         
         // Setup lighting
         setupLighting(this.scene);
@@ -213,6 +218,7 @@ export class Game {
 
         this.update();
         this.render();
+        this.performance.update();
 
         // After rendering, if we scheduled a brief refresh, count it down
         if (this.renderer && this.renderer.shadowMap && this._shadowRefreshFrames > 0) {

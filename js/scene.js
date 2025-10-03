@@ -39,9 +39,13 @@ export function createRenderer(canvas) {
     });
     
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    // Mobile pixel ratio clamping for performance
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const pixelRatio = isMobile ? Math.min(window.devicePixelRatio, 1.0) : Math.min(window.devicePixelRatio, 2.0);
+    renderer.setPixelRatio(pixelRatio);
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // smoother shadow filtering
+    // Reduce shadow quality on mobile for performance
+    renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = CONFIG.RENDERER.TONE_MAPPING_EXPOSURE;
     renderer.outputEncoding = THREE.sRGBEncoding;
@@ -51,6 +55,8 @@ export function createRenderer(canvas) {
 
 // Soft, distributed lighting setup
 export function setupLighting(scene) {
+    // Detect mobile for reduced effects
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const ENABLE_SKYBOX = false; // GLB skybox disabled
     const ENABLE_SKY_DOME = false; // fallback dome disabled
     const ENABLE_SKY_IMAGE = false; // image background disabled
@@ -80,9 +86,10 @@ export function setupLighting(scene) {
         CONFIG.LIGHTING.DIRECTIONAL_POSITION.z
     );
     directionalLight.castShadow = true;
-    // Balanced quality: slightly higher map size and tighter frustum for better texel density
-    directionalLight.shadow.mapSize.width = Math.max(1024, Math.min(2048, 1536));
-    directionalLight.shadow.mapSize.height = Math.max(1024, Math.min(2048, 1536));
+    // Balanced quality: reduce shadow map size on mobile for performance
+    const shadowMapSize = isMobile ? 512 : Math.max(1024, Math.min(2048, 1536));
+    directionalLight.shadow.mapSize.width = shadowMapSize;
+    directionalLight.shadow.mapSize.height = shadowMapSize;
     directionalLight.shadow.camera.near = 0.5;
     directionalLight.shadow.camera.far = 200;
     directionalLight.shadow.camera.left = -100;
@@ -98,7 +105,7 @@ export function setupLighting(scene) {
     // Multiple soft point lights distributed across the environment (optional)
     const pointLights = [];
     
-    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS) {
+    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS && !isMobile) {
         const mkPoint = (x, z) => {
             const l = new THREE.PointLight(0xffa500, 0.22, 70, 2); // modest intensity, limited distance
             l.position.set(x, 6, z);
@@ -114,7 +121,7 @@ export function setupLighting(scene) {
     
     // Corner lights for better coverage
     const cornerLights = [];
-    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS) {
+    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS && !isMobile) {
         // Very light corner fills for balance at minimal cost
         const mkCorner = (x, z) => {
             const c = new THREE.PointLight(0xffe0a0, 0.08, 20, 2);
@@ -131,7 +138,7 @@ export function setupLighting(scene) {
     
     // Soft fill lights from multiple directions
     const fillLights = [];
-    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS) {
+    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS && !isMobile) {
         // Re-introduce very soft directional fills to improve shading without much cost
         const mkFill = (x, z) => {
             const d = new THREE.DirectionalLight(0x87ceeb, 0.12);

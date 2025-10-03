@@ -14,7 +14,8 @@ export const CONFIG = {
         ALPHA: true,
         SHADOW_MAP_SIZE: 1024,
         TONE_MAPPING_EXPOSURE: 1.2,
-        TARGET_FPS: 0 // 0 = uncapped (uses display refresh); set 30/45/60 to cap
+        TARGET_FPS: 0, // 0 = uncapped (uses display refresh); set 30/45/60 to cap
+        MOBILE_EFFECTS_REDUCED: true
     },
     
     // Lighting settings

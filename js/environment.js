@@ -12,6 +12,12 @@ import { TreeLoader } from './tree-loader.js';
 import { createObjectBody } from './physics.js';
 import { createBoundaryWalls } from './boundaries.js';
 
+// Import DRACO Loader if available
+let DRACOLoader;
+if (typeof window !== 'undefined' && window.DRACOLoader) {
+    DRACOLoader = window.DRACOLoader;
+}
+
 // Environment manager
 export class EnvironmentManager {
     constructor(scene, world) {
@@ -55,26 +61,56 @@ export class EnvironmentManager {
         
         this.buildings.forEach(building => {
             this.scene.add(building);
-            this.objects.push(building);
         });
 
-        // Nudge terrain rocks away from roads and buildings
-        this.nudgeRocksAwayFromCollisions(terrain, this.roads, this.buildings);
-        
         // Create trees with external models
         const treeLoader = new TreeLoader();
+        
+        // Create trees first so they can be included in optimization
         this.trees = await treeLoader.createTreeForest();
+        
+        // Optimize placement of all environment objects
+        const optimizationReport = this.optimizeObjectPlacement(this.terrain, this.roads, this.buildings, this.trees, this.vehicles);
+        
+        // Add all objects to the scene after optimization
         this.trees.forEach(tree => {
             this.scene.add(tree);
             this.objects.push(tree);
         });
         
-        // Create vehicles with external models
+        // Log detailed optimization report
+        if (optimizationReport) {
+            console.log('\n=== ENVIRONMENT OPTIMIZATION REPORT ===');
+            console.log(optimizationReport.optimizationSuggestions);
+            
+            // Log object counts
+            console.log('\n📦 Object Counts:');
+            console.log(`- Trees: ${this.trees.length}`);
+            console.log(`- Buildings: ${this.buildings.length}`);
+            console.log(`- Rocks: ${this.terrainRef?.userData?.rocks?.length || 0}`);
+            console.log(`- Vehicles: ${this.vehicles?.length || 0}`);
+            
+            // Log any optimization suggestions
+            if (optimizationReport.problemZones && optimizationReport.problemZones.length > 0) {
+                console.log('\n⚠️  Problem Areas:');
+                optimizationReport.problemZones.forEach(zone => {
+                    console.log(`- ${zone.area}: ${zone.issue} (${zone.count} objects)`);
+                });
+            }
+            
+            console.log('=======================================\n');
+        }
+        
+        // Create and add vehicles to scene
         const vehicleLoader = new VehicleLoader();
-        const vehicles = await vehicleLoader.createVehicleFleet();
-        vehicles.forEach(vehicle => {
-            this.scene.add(vehicle);
-            this.objects.push(vehicle);
+        this.vehicles = await vehicleLoader.createVehicleFleet();
+        
+        // Add vehicles to scene and objects array
+        this.vehicles.forEach(vehicle => {
+            if (vehicle) {
+                this.scene.add(vehicle);
+                this.objects.push(vehicle);
+            }
         });
         
         // Create an archway at the very north entrance over Central Avenue (use GLB if available)
@@ -124,13 +160,102 @@ export class EnvironmentManager {
 
         // Add animated fountain near spawn
         try {
-            const fountain = await this.loadAndPlaceFountain('models/fountain.glb', { x: 7, z: 7 });
-            if (fountain) {
-                this.scene.add(fountain);
-                this.objects.push(fountain);
+            console.log('🔄 Loading fountain from models/fountain.glb...');
+            const fountainPath = 'models/fountain.glb';
+            
+            try {
+                // Check if the file exists first
+                const response = await fetch(fountainPath, { method: 'HEAD' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status} ${response.statusText}`);
+                }
+                console.log('✅ Fountain file is accessible');
+                
+                // Try loading the fountain
+                const fountain = await this.loadAndPlaceFountain(fountainPath, { x: 7, z: 7 });
+                if (fountain) {
+                    this.scene.add(fountain);
+                    this.objects.push(fountain);
+                    console.log('✅ Fountain loaded and added to scene');
+                } else {
+                    throw new Error('Fountain loaded but returned null');
+                }
+            } catch (error) {
+                console.error(`❌ Failed to load fountain from ${fountainPath}:`, error);
+                console.warn('⚠️ Skipping fountain due to loading error');
             }
-        } catch (_) {}
-
+        } catch (error) {
+            console.error('❌ Fountain loading error:', error);
+        }
+        // Add restaurant near spawn point
+        try {
+            console.log('🔄 Loading restaurant from models/restaurant.glb...');
+            const restaurantPath = 'models/restaurant.glb';
+            
+            const response = await fetch(restaurantPath, { method: 'HEAD' });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status} ${response.statusText}`);
+            }
+            console.log('✅ Restaurant file is accessible');
+            
+            // Load the restaurant model
+            console.log('🔄 Creating GLTFLoader...');
+            const loader = new THREE.GLTFLoader();
+            console.log('🔄 Loading restaurant model...');
+            const gltf = await loader.loadAsync(restaurantPath);
+            const restaurant = gltf.scene;
+            
+            // Make sure the model is visible and scaled properly
+            restaurant.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    console.log(`🔍 Found mesh: ${child.name || 'unnamed'}, position:`, child.position);
+                }
+            });
+            
+            // Position the restaurant closer to the center and higher up
+            // Using (0, 0, 0) as the spawn point reference
+            restaurant.position.set(5, 0, -5);  // Closer to spawn
+            restaurant.rotation.y = Math.PI / 4; // Rotate 45 degrees for better placement
+            
+            // Check the bounding box to ensure it's properly sized
+            const box = new THREE.Box3().setFromObject(restaurant);
+            const size = box.getSize(new THREE.Vector3());
+            console.log('📏 Restaurant dimensions:', size);
+            
+            // Scale the restaurant to be twice as big
+            const targetSize = 8; // Increased from 5 to 10 (twice as big)
+            const scale = targetSize / Math.max(size.x, size.y, size.z);
+            restaurant.scale.set(scale, scale, scale);
+            
+            // Tilt the restaurant in the opposite direction (negative rotation)
+            restaurant.rotation.y = -Math.PI / 4; // Rotated in the opposite direction
+            
+            console.log('🎯 Restaurant position:', restaurant.position);
+            console.log('📐 Restaurant scale:', restaurant.scale);
+            console.log('🔄 Restaurant rotation (y):', restaurant.rotation.y);
+            
+            // Add to scene and objects array
+            this.scene.add(restaurant);
+            this.objects.push(restaurant);
+            
+            // Add physics body to make it solid
+            if (this.world && typeof CANNON !== 'undefined') {
+                console.log('🛡️  Adding physics body for restaurant');
+                const body = createObjectBody(this.world, restaurant, { 
+                    mass: 0, 
+                    shape: 'box',
+                    debug: true // Enable debug visualization if available
+                });
+                this.objectBodies.push(body);
+            }
+            
+            console.log('✅ Restaurant added to scene at (15, -15)');
+        } catch (error) {
+            console.error('❌ Failed to load restaurant:', error);
+        }
+        
         // Create boundary walls
         this.boundaryWalls = createBoundaryWalls(this.scene, this.world);
         
@@ -142,7 +267,7 @@ export class EnvironmentManager {
             roads: this.roads,
             buildings: this.buildings,
             trees: this.trees,
-            vehicles,
+            vehicles: this.vehicles || [],
             boundaryWalls: this.boundaryWalls,
             objects: this.objects
         };
@@ -150,12 +275,25 @@ export class EnvironmentManager {
     
     createPhysicsBodies() {
         if (typeof CANNON !== 'undefined' && this.world) {
+            // First clear any existing physics bodies
+            this.objectBodies = [];
+            
+            // Add physics bodies for regular objects
             this.objects.forEach((obj) => {
                 if (obj) {
                     const body = createObjectBody(this.world, obj);
                     this.objectBodies.push(body);
                 } else {
                     this.objectBodies.push(null);
+                }
+            });
+            
+            // Add physics bodies for buildings
+            this.buildings.forEach((building) => {
+                if (building) {
+                    // Create a static physics body for the building
+                    const body = createObjectBody(this.world, building, { mass: 0 }); // Mass of 0 makes it static
+                    this.objectBodies.push(body);
                 }
             });
         }
@@ -195,33 +333,253 @@ export class EnvironmentManager {
         });
     }
 
-    // Move rocks slightly if they overlap roads or buildings
-    nudgeRocksAwayFromCollisions(terrain, roads, buildings) {
-        if (!terrain || !terrain.userData || !terrain.userData.rocks) return;
-        const rocks = terrain.userData.rocks;
+    // Optimize object placement to avoid collisions and generate optimization report
+    optimizeObjectPlacement(terrain, roads, buildings, trees = []) {
+        const problemZones = [];
+        
+        // Check for high-density areas
+        const checkDensity = (objects, type, threshold = 3) => {
+            const grid = new Map();
+            const cellSize = 10; // Size of each grid cell for density check
+            
+            objects.forEach(obj => {
+                const pos = obj.position || obj;
+                const cellX = Math.floor(pos.x / cellSize);
+                const cellZ = Math.floor(pos.z / cellSize);
+                const cellKey = `${cellX},${cellZ}`;
+                grid.set(cellKey, (grid.get(cellKey) || 0) + 1);
+            });
+            
+            // Find cells with too many objects
+            grid.forEach((count, cellKey) => {
+                if (count > threshold) {
+                    const [x, z] = cellKey.split(',').map(Number);
+                    problemZones.push({
+                        area: `Zone (${x*cellSize}, ${z*cellSize}) to (${(x+1)*cellSize}, ${(z+1)*cellSize})`,
+                        issue: `High density of ${type} (${count} objects)`,
+                        count: count
+                    });
+                }
+            });
+        };
+        
+        // Check density for each object type
+        if (terrain?.userData?.rocks?.length) checkDensity(terrain.userData.rocks, 'rocks');
+        if (trees?.length) checkDensity(trees, 'trees');
+        if (buildings?.length) checkDensity(buildings, 'buildings');
+        
+        // Check for objects too close to roads
+        const checkRoadProximity = (objects, type, minDistance = 3) => {
+            let tooCloseCount = 0;
+            
+            objects.forEach(obj => {
+                const pos = obj.position || obj;
+                for (const road of roads) {
+                    const roadBox = new THREE.Box3().setFromObject(road);
+                    const point = new THREE.Vector3(pos.x, 0, pos.z);
+                    const closestPoint = roadBox.clampPoint(point, new THREE.Vector3());
+                    const distance = point.distanceTo(closestPoint);
+                    
+                    if (distance < minDistance) {
+                        tooCloseCount++;
+                        problemZones.push({
+                            area: `Near (${Math.round(pos.x)}, ${Math.round(pos.z)})`,
+                            issue: `${type} too close to road (${distance.toFixed(1)} units)`,
+                            count: 1
+                        });
+                        break;
+                    }
+                }
+            });
+            
+            return tooCloseCount;
+        };
+        
+        if (terrain?.userData?.rocks?.length) {
+            const count = checkRoadProximity(terrain.userData.rocks, 'Rock');
+            if (count > 0) {
+                problemZones.push({
+                    area: 'Various locations',
+                    issue: `${count} rocks are too close to roads`,
+                    count: count
+                });
+            }
+        }
+        const allObjects = [];
+        
+        // Prepare objects for optimization
+        if (terrain?.userData?.rocks) {
+            terrain.userData.rocks.forEach(rock => {
+                allObjects.push({
+                    type: 'rock',
+                    mesh: rock,
+                    originalPosition: rock.position.clone(),
+                    size: new THREE.Box3().setFromObject(rock).getSize(new THREE.Vector3()).length(),
+                    priority: 0 // Higher priority objects are processed first
+                });
+            });
+        }
+        
+        // Add trees to optimization
+        trees.forEach((tree, index) => {
+            allObjects.push({
+                type: 'tree',
+                mesh: tree,
+                originalPosition: tree.position.clone(),
+                size: new THREE.Box3().setFromObject(tree).getSize(new THREE.Vector3()).length(),
+                priority: 1
+            });
+        });
+        
+        // Sort by priority (and size for objects with same priority)
+        allObjects.sort((a, b) => (b.priority - a.priority) || (b.size - a.size));
+        
         const roadBoxes = roads.map(r => new THREE.Box3().setFromObject(r));
         const buildingBoxes = buildings.map(b => new THREE.Box3().setFromObject(b));
         const isOverlapping = (box, target) => box.intersectsBox(target);
         const step = 1.2;
-        rocks.forEach((rock) => {
-            const box = new THREE.Box3().setFromObject(rock);
+        
+        // Store optimization data for reporting
+        const optimizationReport = {
+            totalObjects: allObjects.length,
+            nudgedObjects: 0,
+            totalNudges: 0,
+            maxNudges: 0,
+            objectData: [],
+            statsByType: {},
+            
+            addNudgedObject(objType, originalPos, newPos, nudges, nudgeDistance) {
+                if (!this.statsByType[objType]) {
+                    this.statsByType[objType] = {
+                        count: 0,
+                        totalNudges: 0,
+                        totalDistance: 0
+                    };
+                }
+                
+                this.nudgedObjects++;
+                this.totalNudges += nudges;
+                this.maxNudges = Math.max(this.maxNudges, nudges);
+                
+                const typeStats = this.statsByType[objType];
+                typeStats.count++;
+                typeStats.totalNudges += nudges;
+                typeStats.totalDistance += nudgeDistance;
+                
+                this.objectData.push({
+                    type: objType,
+                    originalPosition: originalPos,
+                    position: newPos.clone(),
+                    nudges: nudges,
+                    nudgeDistance: nudgeDistance
+                });
+            },
+            
+            get optimizationSuggestions() {
+                const suggestions = [];
+                
+                // Overall statistics
+                suggestions.push('🚀 Optimization Suggestions:');
+                suggestions.push(`- ${this.nudgedObjects} objects (${((this.nudgedObjects/this.totalObjects)*100).toFixed(1)}%) required nudging`);
+                suggestions.push(`- Total ${this.totalNudges} nudges performed`);
+                
+                // Statistics by object type
+                Object.entries(this.statsByType).forEach(([type, stats]) => {
+                    const avgNudges = stats.totalNudges / stats.count;
+                    const avgDist = stats.totalDistance / stats.count;
+                    suggestions.push(`\n📊 ${type.charAt(0).toUpperCase() + type.slice(1)}s:`);
+                    suggestions.push(`- ${stats.count} needed nudging (${((stats.count/this.totalObjects)*100).toFixed(1)}%)`);
+                    suggestions.push(`- Average ${avgNudges.toFixed(1)} nudges per object`);
+                    suggestions.push(`- Average nudge distance: ${avgDist.toFixed(2)} units`);
+                });
+                
+                // Identify problem areas
+                const gridSize = 20; // Size of each zone
+                const zoneCounts = {};
+                
+                this.objectData.forEach(obj => {
+                    const zoneX = Math.floor(obj.position.x / gridSize);
+                    const zoneZ = Math.floor(obj.position.z / gridSize);
+                    const zoneKey = `${zoneX},${zoneZ}`;
+                    zoneCounts[zoneKey] = (zoneCounts[zoneKey] || 0) + 1;
+                });
+                
+                // Find zones with most nudges
+                const sortedZones = Object.entries(zoneCounts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 3);
+                
+                if (sortedZones.length > 0) {
+                    suggestions.push('\n🔍 High-density zones (consider adjusting object placement here):');
+                    sortedZones.forEach(([zone, count]) => {
+                        const [x, z] = zone.split(',').map(Number);
+                        suggestions.push(`- Zone (${x*gridSize}, ${z*gridSize}) to (${(x+1)*gridSize}, ${(z+1)*gridSize}): ${count} nudged objects`);
+                    });
+                }
+                
+                return suggestions.join('\n');
+            }
+        };
+        
+        // Process all objects for collision resolution
+        allObjects.forEach(obj => {
+            const mesh = obj.mesh;
+            const originalPosition = new THREE.Vector3().copy(mesh.position);
+            const box = new THREE.Box3().setFromObject(mesh);
             let tries = 0;
-            while (tries < 30 && (roadBoxes.some(b => isOverlapping(box, b)) || buildingBoxes.some(b => isOverlapping(box, b)))) {
+            let totalNudgeDistance = 0;
+            let lastPosition = new THREE.Vector3().copy(mesh.position);
+            
+            // Get all objects that have been placed so far (to avoid nudging into them)
+            const placedObjects = allObjects
+                .filter(o => o !== obj && o.mesh.position.distanceToSquared(mesh.position) < 10000) // Only check nearby objects
+                .map(o => ({
+                    box: new THREE.Box3().setFromObject(o.mesh),
+                    type: o.type,
+                    size: o.size
+                }));
+                
+            // Also check against roads and buildings
+            const staticObjects = [
+                ...roadBoxes.map(box => ({ box, type: 'road' })),
+                ...buildingBoxes.map(box => ({ box, type: 'building' }))
+            ];
+            
+            // Check for collisions with any static or placed objects
+            const hasCollision = () => {
+                // Check against static objects (roads, buildings)
+                if (staticObjects.some(({box: b}) => isOverlapping(box, b))) return true;
+                
+                // Check against other placed objects of same or higher priority
+                return placedObjects.some(other => {
+                    // Only check against objects of same or higher priority
+                    if (other.priority < obj.priority) return false;
+                    return isOverlapping(box, other.box);
+                });
+            };
+            
+            while (tries < 30 && hasCollision()) {
                 // Find nearest overlapping box center
                 let nearestCenter = null;
                 let minDist = Infinity;
                 const center = box.getCenter(new THREE.Vector3());
+                
                 const check = (targets) => {
                     targets.forEach(t => {
                         if (isOverlapping(box, t)) {
                             const c = t.getCenter(new THREE.Vector3());
                             const d = center.distanceToSquared(c);
-                            if (d < minDist) { minDist = d; nearestCenter = c; }
+                            if (d < minDist) { 
+                                minDist = d; 
+                                nearestCenter = c; 
+                            }
                         }
                     });
                 };
+                
                 check(roadBoxes);
                 check(buildingBoxes);
+                
                 let dir = new THREE.Vector3(1, 0, 0);
                 if (nearestCenter) {
                     dir = new THREE.Vector3().subVectors(center, nearestCenter);
@@ -230,14 +588,83 @@ export class EnvironmentManager {
                 } else {
                     dir.set(1, 0, 0).multiplyScalar(step);
                 }
-                rock.position.add(dir);
+                
+                mesh.position.add(dir);
                 box.translate(dir);
+                
+                // Track nudge distance
+                const currentPosition = new THREE.Vector3().copy(mesh.position);
+                totalNudgeDistance += currentPosition.distanceTo(lastPosition);
+                lastPosition.copy(currentPosition);
+                
                 tries++;
             }
+            
             if (tries > 0) {
-                console.log(`🪨 Nudged rock to (${rock.position.x.toFixed(1)}, ${rock.position.z.toFixed(1)}) after ${tries} step(s)`);
+                optimizationReport.addNudgedObject(
+                    obj.type,
+                    originalPosition,
+                    mesh.position.clone(),
+                    tries,
+                    totalNudgeDistance
+                );
+                
+                console.log(`🔄 Nudged ${obj.type} from (${originalPosition.x.toFixed(1)}, ${originalPosition.z.toFixed(1)}) ` +
+                           `to (${mesh.position.x.toFixed(1)}, ${mesh.position.z.toFixed(1)}) ` +
+                           `after ${tries} step(s) (${totalNudgeDistance.toFixed(2)} units)`);
             }
         });
+        
+        // Log optimization report
+        if (optimizationReport.nudgedObjects > 0) {
+            console.log('\n=== OBJECT PLACEMENT OPTIMIZATION REPORT ===');
+            console.log(`Total objects processed: ${optimizationReport.totalObjects}`);
+            console.log(`Objects that needed nudging: ${optimizationReport.nudgedObjects} (${((optimizationReport.nudgedObjects/optimizationReport.totalObjects)*100).toFixed(1)}%)`);
+            console.log(`Total nudges performed: ${optimizationReport.totalNudges}`);
+            console.log(`Maximum nudges for a single object: ${optimizationReport.maxNudges}`);
+            
+            // Show type-specific statistics
+            Object.entries(optimizationReport.statsByType).forEach(([type, stats]) => {
+                console.log(`\n📊 ${type.charAt(0).toUpperCase() + type.slice(1)}s:`);
+                console.log(`- ${stats.count} needed nudging`);
+                console.log(`- Total nudges: ${stats.totalNudges}`);
+                console.log(`- Average nudges per object: ${(stats.totalNudges / stats.count).toFixed(1)}`);
+                console.log(`- Total nudge distance: ${stats.totalDistance.toFixed(2)} units`);
+            });
+            
+            console.log('\n' + optimizationReport.optimizationSuggestions);
+            console.log('===========================================\n');
+            
+            // Generate code snippets for optimized positions by type
+            const optimizedByType = {};
+            optimizationReport.objectData.forEach(obj => {
+                if (!optimizedByType[obj.type]) {
+                    optimizedByType[obj.type] = [];
+                }
+                optimizedByType[obj.type].push({
+                    original: obj.originalPosition,
+                    position: obj.position,
+                    nudges: obj.nudges
+                });
+            });
+            
+            // Generate code for each object type
+            Object.entries(optimizedByType).forEach(([type, objects]) => {
+                const optimizedPositions = objects
+                    .map(obj => {
+                        return `// Original: (${obj.original.x.toFixed(2)}, ${obj.original.z.toFixed(2)}), ` +
+                               `Nudges: ${obj.nudges}\n` +
+                               `{ x: ${obj.position.x.toFixed(2)}, z: ${obj.position.z.toFixed(2)} },`;
+                    })
+                    .join('\n');
+                
+                console.log(`💡 Optimized ${type} positions (${objects.length} objects):\n` + optimizedPositions + '\n');
+            });
+        } else {
+            console.log('✅ No objects needed nudging - great job on the placement!');
+        }
+        
+        return optimizationReport;
     }
 
     // Simple decorative archway: two pillars + semicircular top
@@ -633,13 +1060,36 @@ export class EnvironmentManager {
     // Load animated fountain and place near spawn but off road
     async loadAndPlaceFountain(url, pos = { x: 0, z: 0 }) {
         return new Promise((resolve) => {
-            if (!THREE || !THREE.GLTFLoader) return resolve(null);
+            if (!THREE || !THREE.GLTFLoader) {
+                console.error('❌ THREE.js or GLTFLoader not available');
+                return resolve(null);
+            }
+            
+            console.log(`🔄 Loading fountain from: ${url}`);
+            
             const loader = new THREE.GLTFLoader();
+            
+            // Set up DRACO loader if available
+            if (window.DRACO_LOADER_AVAILABLE && window.THREE && window.THREE.DRACOLoader) {
+                try {
+                    // Use the global DRACOLoader that was already configured in the HTML
+                    loader.setDRACOLoader(new window.THREE.DRACOLoader());
+                    console.log('✅ Using pre-configured DRACO loader');
+                } catch (error) {
+                    console.warn('⚠️ Failed to set up DRACO loader, falling back to uncompressed models:', error);
+                }
+            } else {
+                console.warn('⚠️ DRACOLoader not available - using uncompressed models');
+            }
             loader.load(
                 url,
                 (gltf) => {
+                    console.log('📦 GLTF loaded successfully');
                     const fountain = gltf.scene || gltf.scenes?.[0];
-                    if (!fountain) return resolve(null);
+                    if (!fountain) {
+                        console.error('❌ No scene found in GLTF file');
+                        return resolve(null);
+                    }
 
                     // Store animations if available
                     this.animations = this.animations || [];
@@ -702,8 +1152,18 @@ export class EnvironmentManager {
                     console.log(`⛲ Fountain placed at (${fountain.position.x.toFixed(2)}, ${fountain.position.z.toFixed(2)})`);
                     resolve(fountain);
                 },
-                undefined,
-                () => resolve(null)
+                (progress) => {
+                    console.log(`📊 Fountain loading progress: ${(progress.loaded / progress.total * 100).toFixed(1)}%`);
+                },
+                (error) => {
+                    console.error('❌ Fountain loading failed:', error);
+                    console.error('❌ Error details:', {
+                        message: error.message,
+                        type: error.type,
+                        url: url
+                    });
+                    resolve(null);
+                }
             );
         });
     }
