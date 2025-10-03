@@ -1,5 +1,4 @@
 import { initGame } from './game.js';
-import { SplineExporter } from './spline-export.js';
 
 // Initialize the game when the page loads
 document.addEventListener('DOMContentLoaded', async () => {
@@ -21,10 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     rafId = requestAnimationFrame(tick);
 
     // Init game
-    const game = await initGame();
-    
-    // Setup export functionality
-    setupExportHandlers(game);
+    await initGame();
 
     // Ensure bar reaches 100% before fading (force reflow + slight delay)
     if (rafId) cancelAnimationFrame(rafId);
@@ -40,62 +36,3 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 120);
     });
 });
-
-// Setup export button handlers
-function setupExportHandlers(game) {
-    const exportBtn = document.getElementById('export-btn');
-    const buildingsBtn = document.getElementById('export-buildings-btn');
-    const vehiclesBtn = document.getElementById('export-vehicles-btn');
-    
-    if (exportBtn) {
-        exportBtn.addEventListener('click', async () => {
-            exportBtn.innerHTML = '⏳ Exporting...';
-            exportBtn.disabled = true;
-            
-            try {
-                const exporter = new SplineExporter(game.scene, game);
-                await exporter.exportSceneToSpline({ fullScene: true });
-            } catch (error) {
-                console.error('Export failed:', error);
-                alert('Export failed - check console for details');
-            } finally {
-                exportBtn.innerHTML = '🎨 Export to Spline';
-                exportBtn.disabled = false;
-            }
-        });
-    }
-    
-    if (buildingsBtn) {
-        buildingsBtn.addEventListener('click', async () => {
-            buildingsBtn.innerHTML = '⏳ Buildings...';
-            buildingsBtn.disabled = true;
-            
-            try {
-                const exporter = new SplineExporter(game.scene, game);
-                await exporter.exportLayer('buildings');
-            } catch (error) {
-                console.error('Buildings export failed:', error);
-            } finally {
-                buildingsBtn.innerHTML = '🏢 Export Buildings';
-                buildingsBtn.disabled = false;
-            }
-        });
-    }
-    
-    if (vehiclesBtn) {
-        vehiclesBtn.addEventListener('click', async () => {
-            vehiclesBtn.innerHTML = '⏳ Vehicles...';
-            vehiclesBtn.disabled = true;
-            
-            try {
-                const exporter = new SplineExporter(game.scene, game);
-                await exporter.exportLayer('vehicles');
-            } catch (error) {
-                console.error('Vehicles export failed:', error);
-            } finally {
-                vehiclesBtn.innerHTML = '🚗 Export Vehicles';
-                vehiclesBtn.disabled = false;
-            }
-        });
-    }
-}
