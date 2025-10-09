@@ -32,24 +32,63 @@ export function createCamera() {
 
 // Renderer setup
 export function createRenderer(canvas) {
+    // Detect device capabilities
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const isHighEndDevice = !isMobile && window.devicePixelRatio > 1;
+    
+    // Optimize WebGL context creation
+    const contextAttributes = {
+        alpha: CONFIG.RENDERER.ALPHA,
+        antialias: isHighEndDevice && CONFIG.RENDERER.ANTIALIAS, // Only enable antialias on high-end devices
+        powerPreference: 'high-performance',
+        stencil: false,
+        depth: true,
+        failIfMajorPerformanceCaveat: true
+    };
+
+    // Create renderer with optimized settings
     const renderer = new THREE.WebGLRenderer({
         canvas: canvas,
-        antialias: CONFIG.RENDERER.ANTIALIAS,
-        alpha: CONFIG.RENDERER.ALPHA
+        ...contextAttributes
     });
     
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    // Mobile pixel ratio clamping for performance
-    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    // Set size with DPR consideration
     const pixelRatio = isMobile ? Math.min(window.devicePixelRatio, 1.0) : Math.min(window.devicePixelRatio, 2.0);
     renderer.setPixelRatio(pixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    // Enable and configure shadows
     renderer.shadowMap.enabled = true;
-    // Reduce shadow quality on mobile for performance
     renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+    
+    // Optimize renderer settings
+    renderer.autoClear = true;
+    renderer.sortObjects = true; // Important for transparency
+    renderer.autoClearDepth = true;
+    renderer.autoClearStencil = false;
+    renderer.autoClearColor = true;
+    
+    // Tone mapping and output encoding
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = CONFIG.RENDERER.TONE_MAPPING_EXPOSURE;
     renderer.outputEncoding = THREE.sRGBEncoding;
-    renderer.setClearColor(0x87ceeb, 1); // sky blue
+    
+    // Enable WebGL 2.0 features if available
+    if (renderer.capabilities.isWebGL2) {
+        // Enable EXT_color_buffer_float for HDR rendering
+        renderer.extensions.get('EXT_color_buffer_float');
+        // Enable OES_texture_float_linear for better texture filtering
+        renderer.extensions.get('OES_texture_float_linear');
+    }
+    
+    // Set clear color (sky blue)
+    renderer.setClearColor(0x87ceeb, 1);
+    
+    // Log WebGL capabilities for debugging
+    console.log('WebGL Renderer:', renderer.info.render);
+    console.log('Max Texture Size:', renderer.capabilities.maxTextureSize);
+    console.log('Max Anisotropy:', renderer.capabilities.maxAnisotropy);
+    
     return renderer;
 }
 
@@ -75,7 +114,7 @@ export function setupLighting(scene) {
     );
     scene.add(hemisphereLight);
     
-    // Main directional light (sun) - softer
+    // Main directional light (sun) with optimized shadows
     const directionalLight = new THREE.DirectionalLight(
         CONFIG.LIGHTING.DIRECTIONAL_COLOR,
         CONFIG.LIGHTING.DIRECTIONAL_INTENSITY
@@ -85,19 +124,42 @@ export function setupLighting(scene) {
         Math.max(100, CONFIG.LIGHTING.DIRECTIONAL_POSITION.y),
         CONFIG.LIGHTING.DIRECTIONAL_POSITION.z
     );
+    
+    // Enable shadows with optimized settings
     directionalLight.castShadow = true;
-    // Balanced quality: reduce shadow map size on mobile for performance
-    const shadowMapSize = isMobile ? 512 : Math.max(1024, Math.min(2048, 1536));
+    
+    // Dynamic shadow quality based on device
+    const isHighEndDevice = !isMobile && window.devicePixelRatio > 1;
+    const shadowMapSize = isMobile ? 512 : (isHighEndDevice ? 2048 : 1024);
+    
+    // Set shadow map properties
     directionalLight.shadow.mapSize.width = shadowMapSize;
     directionalLight.shadow.mapSize.height = shadowMapSize;
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 200;
-    directionalLight.shadow.camera.left = -100;
-    directionalLight.shadow.camera.right = 100;
-    directionalLight.shadow.camera.top = 100;
-    directionalLight.shadow.camera.bottom = -100;
-    directionalLight.shadow.bias = -0.0002;
-    if ('normalBias' in directionalLight.shadow) directionalLight.shadow.normalBias = 0.02;
+    
+    // Optimize shadow camera frustum
+    directionalLight.shadow.camera.near = 1;
+    directionalLight.shadow.camera.far = 150; // Reduced from 200
+    
+    // Tighten shadow frustum to cover just the visible area
+    const shadowDistance = 50; // How far shadows should be visible
+    directionalLight.shadow.camera.left = -shadowDistance;
+    directionalLight.shadow.camera.right = shadowDistance;
+    directionalLight.shadow.camera.top = shadowDistance;
+    directionalLight.shadow.camera.bottom = -shadowDistance;
+    
+    // Optimize shadow quality
+    directionalLight.shadow.bias = -0.001; // Reduced from -0.0002 to reduce shadow acne
+    if ('normalBias' in directionalLight.shadow) {
+        directionalLight.shadow.normalBias = 0.05; // Increased from 0.02 to reduce shadow acne
+    }
+    
+    // Use better shadow map type if available
+    if (!isMobile) {
+        directionalLight.shadow.mapType = THREE.PCFSoftShadowMap;
+    }
+    
+    // Update the shadow camera's projection matrix
+    directionalLight.shadow.camera.updateProjectionMatrix();
     // Additional softness for PCFSoft
     if ('radius' in directionalLight.shadow) directionalLight.shadow.radius = 2;
     scene.add(directionalLight);

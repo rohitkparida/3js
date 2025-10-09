@@ -9,9 +9,24 @@ export function createPhysicsWorld() {
     
     const world = new CANNON.World();
     world.gravity.set(0, CONFIG.PHYSICS.GRAVITY, 0);
-    world.broadphase = new CANNON.NaiveBroadphase();
-    world.solver.iterations = Math.max(10, CONFIG.PHYSICS.SOLVER_ITERATIONS);
-    world.solver.tolerance = 0.001;
+    
+    // Use SAPBroadphase for better performance with many objects
+    world.broadphase = new CANNON.SAPBroadphase(world);
+    
+    // Enable sleeping for better performance
+    world.allowSleep = true;
+    
+    // Optimize solver settings
+    world.solver.iterations = Math.min(10, CONFIG.PHYSICS.SOLVER_ITERATIONS); // Reduced from max to min
+    world.solver.tolerance = 0.01; // Slightly higher tolerance for better performance
+    
+    // Optimize broadphase
+    world.broadphase.useBoundingBoxes = true;
+    world.broadphase.dirty = true;
+    
+    // Enable sleeping for static bodies by default
+    world.defaultContactMaterial.contactEquationStiffness = 1e6;
+    world.defaultContactMaterial.contactEquationRelaxation = 4;
     
     return world;
 }
@@ -21,8 +36,17 @@ export function createGroundBody(world) {
     if (!world) return null;
     
     const groundShape = new CANNON.Plane();
-    const groundBody = new CANNON.Body({ mass: 0 });
-    groundBody.addShape(groundShape);
+    const groundBody = new CANNON.Body({ 
+        mass: 0, // Static body
+        shape: groundShape,
+        material: new CANNON.Material('groundMaterial')
+    });
+    
+    // Optimize static body
+    groundBody.allowSleep = true;
+    groundBody.sleepSpeedLimit = 0.1;
+    groundBody.sleepTimeLimit = 1;
+    
     groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
     world.addBody(groundBody);
     
