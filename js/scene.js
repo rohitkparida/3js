@@ -1,7 +1,8 @@
 import { CONFIG } from './config.js';
+import { TextureUtils } from './utils/texture-utils.js';
 
 // Scene setup
-export function createScene() {
+export async function createScene() {
     const scene = new THREE.Scene();
     // Light fog to hide distant detail and reduce overdraw
     try {
@@ -9,6 +10,75 @@ export function createScene() {
         const nearFog = Math.max(CONFIG.SCENE.FAR - 40, CONFIG.SCENE.FAR * 0.7);
         scene.fog = new THREE.Fog(0x87ceeb, nearFog, CONFIG.SCENE.FAR);
     } catch (_) {}
+    
+    // Load a test texture (for demonstration)
+    // Uncomment to test texture loading
+    // await loadTestTexture(scene);
+    
+    // Detect mobile for reduced effects
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    // Softer ambient light
+    const ambientLight = new THREE.AmbientLight(
+        CONFIG.LIGHTING.AMBIENT_COLOR,
+        CONFIG.LIGHTING.AMBIENT_INTENSITY
+    );
+    scene.add(ambientLight);
+    
+    // Hemisphere light for realistic sky/ground lighting
+    const hemisphereLight = new THREE.HemisphereLight(
+        CONFIG.LIGHTING.HEMISPHERE_SKY_COLOR,
+        CONFIG.LIGHTING.HEMISPHERE_GROUND_COLOR,
+        CONFIG.LIGHTING.HEMISPHERE_INTENSITY
+    );
+    scene.add(hemisphereLight);
+    
+    // Main directional light (sun) with optimized shadows
+    const directionalLight = new THREE.DirectionalLight(
+        CONFIG.LIGHTING.DIRECTIONAL_COLOR,
+        CONFIG.LIGHTING.DIRECTIONAL_INTENSITY
+    );
+    directionalLight.position.set(
+        CONFIG.LIGHTING.DIRECTIONAL_POSITION.x,
+        Math.max(100, CONFIG.LIGHTING.DIRECTIONAL_POSITION.y),
+        CONFIG.LIGHTING.DIRECTIONAL_POSITION.z
+    );
+    
+    // Enable shadows with optimized settings
+    directionalLight.castShadow = true;
+    
+    // Dynamic shadow quality based on device
+    const isHighEndDevice = !isMobile && window.devicePixelRatio > 1;
+    const shadowMapSize = isMobile ? 512 : (isHighEndDevice ? 2048 : 1024);
+    
+    // Set shadow map properties
+    directionalLight.shadow.mapSize.width = shadowMapSize;
+    directionalLight.shadow.mapSize.height = shadowMapSize;
+    
+    // Optimize shadow camera frustum
+    directionalLight.shadow.camera.near = 1;
+    directionalLight.shadow.camera.far = 150; // Reduced from 200
+    
+    // Tighten shadow frustum to cover just the visible area
+    const shadowDistance = 50; // How far shadows should be visible
+    directionalLight.shadow.camera.left = -shadowDistance;
+    directionalLight.shadow.camera.right = shadowDistance;
+    directionalLight.shadow.camera.top = shadowDistance;
+    directionalLight.shadow.camera.bottom = -shadowDistance;
+    
+    // Optimize shadow quality
+    directionalLight.shadow.bias = -0.001; // Reduced from -0.0002 to reduce shadow acne
+    if ('normalBias' in directionalLight.shadow) {
+        directionalLight.shadow.normalBias = 0.05; // Helps with shadow acne
+    }
+    
+    scene.add(directionalLight);
+    
+    // Add a small fill light to reduce harsh shadows
+    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+    fillLight.position.set(-50, 30, 30);
+    scene.add(fillLight);
+    
     return scene;
 }
 
@@ -69,9 +139,13 @@ export function createRenderer(canvas) {
     renderer.autoClearColor = true;
     
     // Tone mapping and output encoding
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMapping = THREE.ReinhardToneMapping; // More vibrant than ACESFilmic
     renderer.toneMappingExposure = CONFIG.RENDERER.TONE_MAPPING_EXPOSURE;
     renderer.outputEncoding = THREE.sRGBEncoding;
+    
+    // Enable gamma correction for more accurate colors
+    renderer.gammaFactor = 2.2;
+    renderer.gammaOutput = true;
     
     // Enable WebGL 2.0 features if available
     if (renderer.capabilities.isWebGL2) {
@@ -88,17 +162,60 @@ export function createRenderer(canvas) {
     console.log('WebGL Renderer:', renderer.info.render);
     console.log('Max Texture Size:', renderer.capabilities.maxTextureSize);
     console.log('Max Anisotropy:', renderer.capabilities.maxAnisotropy);
-    
     return renderer;
 }
 
 // Soft, distributed lighting setup
+/**
+ * Test texture loading and optimization
+ * @param {THREE.Scene} scene - The scene to add the test object to
+ * @returns {Promise<THREE.Mesh|null>} The created plane mesh or null if failed
+ */
+async function loadTestTexture(scene) {
+    try {
+        // Create a simple test plane with a texture
+        const geometry = new THREE.PlaneGeometry(5, 5);
+        
+        // Load and optimize texture
+        const texture = await TextureUtils.loadTexture('textures/test-texture.jpg', {
+            generateMipmaps: true,
+            anisotropy: 4
+        });
+        
+        const material = new THREE.MeshStandardMaterial({
+            map: texture,
+            side: THREE.DoubleSide
+        });
+        
+        const plane = new THREE.Mesh(geometry, material);
+        plane.rotation.x = -Math.PI / 2; // Make it horizontal
+        plane.position.y = 0.1; // Slightly above ground to avoid z-fighting
+        plane.receiveShadow = true;
+        scene.add(plane);
+        
+        console.log('Test texture loaded and optimized');
+        
+        // Log texture memory usage (for debugging)
+        setTimeout(() => {
+            TextureUtils.debug.logMemoryUsage();
+        }, 1000);
+        
+        return plane;
+    } catch (error) {
+        console.error('Failed to load test texture:', error);
+        return null;
+    }
+}
+
+// Setup lighting for the scene
 export function setupLighting(scene) {
+    // Initialize light arrays
+    const pointLights = [];
+    const cornerLights = [];
+    
     // Detect mobile for reduced effects
     const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const ENABLE_SKYBOX = false; // GLB skybox disabled
-    const ENABLE_SKY_DOME = false; // fallback dome disabled
-    const ENABLE_SKY_IMAGE = false; // image background disabled
+    
     // Softer ambient light
     const ambientLight = new THREE.AmbientLight(
         CONFIG.LIGHTING.AMBIENT_COLOR,
@@ -135,56 +252,50 @@ export function setupLighting(scene) {
     // Set shadow map properties
     directionalLight.shadow.mapSize.width = shadowMapSize;
     directionalLight.shadow.mapSize.height = shadowMapSize;
+    directionalLight.shadow.bias = -0.001;
+    
+    if ('normalBias' in directionalLight.shadow) {
+        directionalLight.shadow.normalBias = 0.05;
+    }
     
     // Optimize shadow camera frustum
     directionalLight.shadow.camera.near = 1;
-    directionalLight.shadow.camera.far = 150; // Reduced from 200
+    directionalLight.shadow.camera.far = 150;
     
     // Tighten shadow frustum to cover just the visible area
-    const shadowDistance = 50; // How far shadows should be visible
+    const shadowDistance = 50;
     directionalLight.shadow.camera.left = -shadowDistance;
     directionalLight.shadow.camera.right = shadowDistance;
     directionalLight.shadow.camera.top = shadowDistance;
     directionalLight.shadow.camera.bottom = -shadowDistance;
     
-    // Optimize shadow quality
-    directionalLight.shadow.bias = -0.001; // Reduced from -0.0002 to reduce shadow acne
-    if ('normalBias' in directionalLight.shadow) {
-        directionalLight.shadow.normalBias = 0.05; // Increased from 0.02 to reduce shadow acne
-    }
-    
-    // Use better shadow map type if available
-    if (!isMobile) {
-        directionalLight.shadow.mapType = THREE.PCFSoftShadowMap;
-    }
-    
     // Update the shadow camera's projection matrix
     directionalLight.shadow.camera.updateProjectionMatrix();
+    
     // Additional softness for PCFSoft
-    if ('radius' in directionalLight.shadow) directionalLight.shadow.radius = 2;
+    if ('radius' in directionalLight.shadow) {
+        directionalLight.shadow.radius = 2;
+    }
+    
     scene.add(directionalLight);
     
     // Multiple soft point lights distributed across the environment (optional)
-    const pointLights = [];
-    
     if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS && !isMobile) {
+        // Main directional lights
         const mkPoint = (x, z) => {
-            const l = new THREE.PointLight(0xffa500, 0.22, 70, 2); // modest intensity, limited distance
+            const l = new THREE.PointLight(0xffa500, 0.22, 70, 2);
             l.position.set(x, 6, z);
             l.castShadow = false;
             scene.add(l);
             pointLights.push(l);
         };
+        
         mkPoint(0, 40);   // North
         mkPoint(0, -40);  // South
         mkPoint(40, 0);   // East
         mkPoint(-40, 0);  // West
-    }
-    
-    // Corner lights for better coverage
-    const cornerLights = [];
-    if (CONFIG.LIGHTING.USE_EXTRA_LIGHTS && !isMobile) {
-        // Very light corner fills for balance at minimal cost
+        
+        // Corner lights for better coverage
         const mkCorner = (x, z) => {
             const c = new THREE.PointLight(0xffe0a0, 0.08, 20, 2);
             c.position.set(x, 5, z);
@@ -192,6 +303,7 @@ export function setupLighting(scene) {
             scene.add(c);
             cornerLights.push(c);
         };
+        
         mkCorner(30, 30);
         mkCorner(-30, 30);
         mkCorner(30, -30);
@@ -215,9 +327,9 @@ export function setupLighting(scene) {
         mkFill(-20, 0);   // West
     }
     
-    // Fallback sky dome (disabled)
+    // Fallback sky dome (disabled by default)
     let sky = null;
-    if (ENABLE_SKY_DOME) {
+    if (CONFIG.SCENE.ENABLE_SKY_DOME) {
         const skyGeometry = new THREE.SphereGeometry(3000, 32, 16);
         const skyMaterial = new THREE.MeshBasicMaterial({ color: 0x87ceeb, side: THREE.BackSide, depthWrite: false });
         sky = new THREE.Mesh(skyGeometry, skyMaterial);
@@ -227,7 +339,7 @@ export function setupLighting(scene) {
 
     // Optional GLB skybox
     try {
-        if (ENABLE_SKYBOX && THREE && THREE.GLTFLoader) {
+        if (CONFIG.SCENE.ENABLE_SKYBOX && THREE && THREE.GLTFLoader) {
             const loader = new THREE.GLTFLoader();
             loader.load(
                 'models/skybox.glb',
@@ -279,7 +391,7 @@ export function setupLighting(scene) {
     }
 
     // Image background fallback (JPG/PNG)
-    if (ENABLE_SKY_IMAGE) {
+    if (CONFIG.SCENE.ENABLE_SKY_IMAGE) {
         try {
             const texLoader = new THREE.TextureLoader();
             const candidates = ['models/skybox.jpg', 'models/skybox.png', 'models/sky.jpg', 'models/sky.png'];

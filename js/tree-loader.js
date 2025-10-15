@@ -1,4 +1,6 @@
 // Tree loader for external 3D models
+import { logger } from './utils/logger.js';
+
 export class TreeLoader {
     constructor() {
         this.loader = null;
@@ -25,14 +27,14 @@ export class TreeLoader {
         try {
             if (typeof THREE !== 'undefined' && THREE.GLTFLoader) {
                 this.loader = new THREE.GLTFLoader();
-                console.log('✅ Tree GLTFLoader initialized successfully');
+                logger.info('Tree GLTFLoader initialized successfully', 'TREE');
             } else {
-                console.warn('❌ GLTFLoader not available in THREE object');
-                console.log('Available THREE loaders:', Object.keys(THREE).filter(key => key.includes('Loader')));
+                logger.warn('GLTFLoader not available in THREE object', 'TREE');
+                logger.debug('Available THREE loaders:', Object.keys(THREE).filter(key => key.includes('Loader')), 'TREE');
                 this.loader = null;
             }
         } catch (error) {
-            console.warn('❌ Tree GLTFLoader initialization failed:', error);
+            logger.warn('Tree GLTFLoader initialization failed', 'TREE', error);
             this.loader = null;
         }
     }
@@ -40,17 +42,17 @@ export class TreeLoader {
     // Load a tree model from URL
     async loadTreeModel(url) {
         if (!this.loader) {
-            console.log('⚠️ No tree loader available, using fallback tree');
+            logger.debug('No tree loader available, using fallback tree', 'TREE');
             return this.createFallbackTree();
         }
 
-        console.log('🔄 Attempting to load tree model:', url);
+        logger.debug('Attempting to load tree model', 'TREE', { url });
 
         return new Promise((resolve, reject) => {
             this.loader.load(
                 url,
                 (gltf) => {
-                    console.log('✅ Tree GLTF loaded successfully:', url);
+                    logger.info('Tree GLTF loaded successfully', 'TREE', { url });
                     const model = gltf.scene;
                     
                     // Calculate proper size scaling
@@ -77,18 +79,18 @@ export class TreeLoader {
                         }
                     });
                     
-                    console.log('✅ Tree model processed successfully:', url);
-                    console.log(`📏 Tree scaled by factor: ${scaleFactor.toFixed(2)}`);
+                    logger.debug('Tree model processed successfully', 'TREE', { url, scaleFactor: scaleFactor.toFixed(2) });
                     resolve(model);
                 },
                 (progress) => {
                     if (progress.total > 0) {
-                        console.log('Tree loading progress:', (progress.loaded / progress.total * 100).toFixed(1) + '%');
+                        const percent = (progress.loaded / progress.total * 100).toFixed(1);
+                        logger.debug('Tree loading progress', 'TREE', { url, progress: `${percent}%` });
                     }
                 },
                 (error) => {
-                    console.error('❌ Error loading tree model:', url, error);
-                    console.log('🔄 Falling back to primitive tree');
+                    logger.error('Error loading tree model', 'TREE', { url, error });
+                    logger.info('Falling back to primitive tree', 'TREE');
                     resolve(this.createFallbackTree());
                 }
             );
@@ -125,10 +127,10 @@ export class TreeLoader {
         let treeModel;
         
         if (modelUrl && this.loader) {
-            console.log('🔄 Attempting to load GLB tree model:', modelUrl);
+            logger.debug('Attempting to load GLB tree model', 'TREE', { modelUrl });
             treeModel = await this.loadTreeModel(modelUrl);
         } else {
-            console.log('🔄 Using fallback tree (no model URL or loader)');
+            logger.debug('Using fallback tree (no model URL or loader)', 'TREE');
             treeModel = this.createFallbackTree();
         }
         
@@ -137,7 +139,7 @@ export class TreeLoader {
         
         treeModel.position.set(x, 0, z);
         
-        console.log(`🌳 Tree created at (${x}, ${z}) with size ${size}`);
+        logger.debug('Tree created', 'TREE', { x, z, size });
         return treeModel;
     }
 
@@ -149,34 +151,25 @@ export class TreeLoader {
         // Tree model URL
         const treeModelUrl = 'models/tree.glb';
         
-        // Safe tree positions - far from roads
+        // Safe tree positions - far from roads (reduced for performance - 25 total)
         let treePositions = [
-            // North area (far from North Avenue)
-            [-55, 55], [-45, 55], [-35, 55], [-25, 55], [-15, 55], [15, 55], [25, 55], [35, 55], [45, 55], [55, 55],
-            
-            // South area (far from South Avenue)
-            [-55, -55], [-45, -55], [-35, -55], [-25, -55], [-15, -55], [15, -55], [25, -55], [35, -55], [45, -55], [55, -55],
-            
-            // East area (far from East Street and industrial buildings)
-            [55, -45], [55, -35], [55, -25], [55, -5], [55, 5], [55, 25], [55, 35], [55, 45],
-            
-            // West area (far from West Street and industrial buildings)
-            [-55, -45], [-55, -35], [-55, -25], [-55, -5], [-55, 5], [-55, 25], [-55, 35], [-55, 45],
-            
-            // Central areas (between main roads)
-            [-25, 10], [-25, -10], [25, 10], [25, -10],
-            [-10, 25], [-10, -25], [10, 25], [10, -25],
-            
-            // Corner areas
-            [-65, 65], [65, 65], [-65, -65], [65, -65]
-        ];
-        // Apply light jitter to base positions (seeded)
-        treePositions = treePositions.map(([x, z]) => [
-            x + (this.rand() - 0.5) * 2,
-            z + (this.rand() - 0.5) * 2
-        ]);
+            // North area - 6 positions for 25 total
+            [-55, 55], [-45, 55], [-35, 55], [-25, 55], [-15, 55], [15, 55],
 
-        // Create a second set with a radial offset (so they don't sit as pairs)
+            // South area - 6 positions
+            [-55, -55], [-45, -55], [-35, -55], [-25, -55], [-15, -55], [15, -55],
+
+            // East area - 5 positions
+            [55, -35], [55, -25], [55, -15], [55, 15], [55, 25],
+
+            // West area - 5 positions
+            [-55, -35], [-55, -25], [-55, -15], [-55, 15], [-55, 25],
+
+            // Central areas - 3 positions
+            [-25, 10], [25, 10], [-10, 25]
+        ];
+
+        // Create a second set with radial offset (25 more for 50 total)
         const extra = treePositions.map(([x, z]) => {
             const angle = this.rand() * Math.PI * 2;
             const dist = 4 + this.rand() * 6; // 4–10 units away
@@ -281,30 +274,37 @@ export class TreeLoader {
             [treePositions[i], treePositions[j]] = [treePositions[j], treePositions[i]];
         }
         
-        console.log('🌲 Loading tree forest with external models...');
-        console.log('📁 Tree model:', treeModelUrl);
-        
+        logger.info('Loading tree forest with external models', 'TREE');
+        logger.debug('Tree model', 'TREE', { treeModelUrl });
+
         for (let i = 0; i < treePositions.length; i++) {
             const [x, z] = treePositions[i];
             const size = this.rand() * 0.3 + 0.7;
-            
-            console.log(`🔄 Creating tree ${i + 1}/${treePositions.length} at (${x}, ${z})`);
-            
+
+            // Only log progress every 10 trees to reduce spam
+            if (i % 10 === 0) {
+                logger.debug('Creating trees', 'TREE', { progress: `${i}/${treePositions.length}` });
+            }
+
             try {
                 const tree = await this.createTree(x, z, size, treeModelUrl);
                 trees.push(tree);
-                console.log(`✅ Tree ${i + 1}/${treePositions.length} created successfully at (${x}, ${z})`);
+
+                // Log success every 20 trees to reduce noise
+                if (i % 20 === 0) {
+                    logger.debug('Tree batch created', 'TREE', { count: i + 1, total: treePositions.length });
+                }
             } catch (error) {
-                console.error('❌ Error creating tree:', error);
+                logger.error('Error creating tree', 'TREE', { index: i, x, z, error });
                 // Create fallback tree
-                console.log('🔄 Creating fallback tree...');
+                logger.debug('Creating fallback tree', 'TREE');
                 const fallbackTree = await this.createTree(x, z, size);
                 trees.push(fallbackTree);
-                console.log(`✅ Fallback tree ${i + 1} created at (${x}, ${z})`);
+                logger.debug('Fallback tree created', 'TREE', { index: i, x, z });
             }
         }
-        
-        console.log(`🎉 Tree forest created with ${trees.length} trees`);
+
+        logger.info('Tree forest created', 'TREE', { count: trees.length });
         return trees;
     }
 }

@@ -122,9 +122,10 @@ export function createCharacter() {
 
 // Character movement controller
 export class CharacterController {
-    constructor(character, characterBody) {
+    constructor(character, characterBody, camera = null) {
         this.character = character;
         this.characterBody = characterBody;
+        this.camera = camera; // Add camera reference for relative movement
         this.keys = {
             w: false,
             a: false,
@@ -132,10 +133,10 @@ export class CharacterController {
             d: false,
             space: false
         };
-        
+
         this.setupEventListeners();
     }
-    
+
     setupEventListeners() {
         document.addEventListener('keydown', (event) => {
             switch(event.key.toLowerCase()) {
@@ -157,7 +158,7 @@ export class CharacterController {
                     break;
             }
         });
-        
+
         document.addEventListener('keyup', (event) => {
             switch(event.key.toLowerCase()) {
                 case 'w':
@@ -178,23 +179,56 @@ export class CharacterController {
             }
         });
     }
-    
+
     update() {
         if (typeof CANNON !== 'undefined' && this.characterBody) {
-            // Physics-driven movement: set body velocity, sync mesh from body
-            const desiredVelocity = { x: 0, z: 0 };
-            const speed = CONFIG.CHARACTER.MOVE_SPEED * 20; // faster traversal
-            if (this.keys.w) desiredVelocity.z -= speed;
-            if (this.keys.s) desiredVelocity.z += speed;
-            if (this.keys.a) desiredVelocity.x -= speed;
-            if (this.keys.d) desiredVelocity.x += speed;
+            // Physics-driven movement with camera-relative controls
+            const moveVector = new THREE.Vector3();
 
-            this.characterBody.velocity.x = desiredVelocity.x;
-            this.characterBody.velocity.z = desiredVelocity.z;
+            // Get camera rotation for relative movement
+            if (this.camera) {
+                // Extract camera's Y rotation (horizontal rotation) for movement direction
+                // Add π to flip the direction so W moves forward as expected
+                const cameraRotationY = this.camera.rotation.y + Math.PI;
+
+                // Create movement vector relative to camera direction
+                if (this.keys.w) {
+                    // Forward relative to camera - W should move FORWARD
+                    moveVector.x += Math.sin(cameraRotationY) * CONFIG.CHARACTER.MOVE_SPEED * 20;
+                    moveVector.z += Math.cos(cameraRotationY) * CONFIG.CHARACTER.MOVE_SPEED * 20;
+                }
+                if (this.keys.s) {
+                    // Backward relative to camera - S should move BACKWARD
+                    moveVector.x -= Math.sin(cameraRotationY) * CONFIG.CHARACTER.MOVE_SPEED * 20;
+                    moveVector.z -= Math.cos(cameraRotationY) * CONFIG.CHARACTER.MOVE_SPEED * 20;
+                }
+                if (this.keys.a) {
+                    // Left relative to camera - use the original rotation for strafing
+                    const originalRotationY = this.camera.rotation.y;
+                    moveVector.x += Math.sin(originalRotationY - Math.PI / 2) * CONFIG.CHARACTER.MOVE_SPEED * 20;
+                    moveVector.z += Math.cos(originalRotationY - Math.PI / 2) * CONFIG.CHARACTER.MOVE_SPEED * 20;
+                }
+                if (this.keys.d) {
+                    // Right relative to camera - use the original rotation for strafing
+                    const originalRotationY = this.camera.rotation.y;
+                    moveVector.x += Math.sin(originalRotationY + Math.PI / 2) * CONFIG.CHARACTER.MOVE_SPEED * 20;
+                    moveVector.z += Math.cos(originalRotationY + Math.PI / 2) * CONFIG.CHARACTER.MOVE_SPEED * 20;
+                }
+            } else {
+                // Fallback to world-relative movement if no camera
+                if (this.keys.w) moveVector.z -= CONFIG.CHARACTER.MOVE_SPEED * 20;
+                if (this.keys.s) moveVector.z += CONFIG.CHARACTER.MOVE_SPEED * 20;
+                if (this.keys.a) moveVector.x -= CONFIG.CHARACTER.MOVE_SPEED * 20;
+                if (this.keys.d) moveVector.x += CONFIG.CHARACTER.MOVE_SPEED * 20;
+            }
+
+            // Apply movement to physics body
+            this.characterBody.velocity.x = moveVector.x;
+            this.characterBody.velocity.z = moveVector.z;
 
             // Rotate character to face movement direction
-            if (desiredVelocity.x !== 0 || desiredVelocity.z !== 0) {
-                const targetRotation = Math.atan2(desiredVelocity.x, desiredVelocity.z);
+            if (moveVector.length() > 0) {
+                const targetRotation = Math.atan2(moveVector.x, moveVector.z);
                 this.character.rotation.y = targetRotation;
             }
 
@@ -218,28 +252,56 @@ export class CharacterController {
                 this.characterBody.position.y,
                 this.characterBody.position.z
             );
-            
-            
+
+
         } else {
-            // Fallback movement without physics
+            // Fallback movement without physics (camera-relative)
             const moveVector = new THREE.Vector3();
-            
-            if (this.keys.w) moveVector.z -= CONFIG.CHARACTER.MOVE_SPEED;
-            if (this.keys.s) moveVector.z += CONFIG.CHARACTER.MOVE_SPEED;
-            if (this.keys.a) moveVector.x -= CONFIG.CHARACTER.MOVE_SPEED;
-            if (this.keys.d) moveVector.x += CONFIG.CHARACTER.MOVE_SPEED;
-            
+
+            if (this.camera) {
+                // Camera-relative movement for non-physics fallback
+                // Add π to flip the direction so W moves forward as expected
+                const cameraRotationY = this.camera.rotation.y + Math.PI;
+
+                if (this.keys.w) {
+                    moveVector.x += Math.sin(cameraRotationY) * CONFIG.CHARACTER.MOVE_SPEED;
+                    moveVector.z += Math.cos(cameraRotationY) * CONFIG.CHARACTER.MOVE_SPEED;
+                }
+                if (this.keys.s) {
+                    moveVector.x -= Math.sin(cameraRotationY) * CONFIG.CHARACTER.MOVE_SPEED;
+                    moveVector.z -= Math.cos(cameraRotationY) * CONFIG.CHARACTER.MOVE_SPEED;
+                }
+                if (this.keys.a) {
+                    // Left relative to camera - use the original rotation for strafing
+                    const originalRotationY = this.camera.rotation.y;
+                    moveVector.x += Math.sin(originalRotationY - Math.PI / 2) * CONFIG.CHARACTER.MOVE_SPEED;
+                    moveVector.z += Math.cos(originalRotationY - Math.PI / 2) * CONFIG.CHARACTER.MOVE_SPEED;
+                }
+                if (this.keys.d) {
+                    // Right relative to camera - use the original rotation for strafing
+                    const originalRotationY = this.camera.rotation.y;
+                    moveVector.x += Math.sin(originalRotationY + Math.PI / 2) * CONFIG.CHARACTER.MOVE_SPEED;
+                    moveVector.z += Math.cos(originalRotationY + Math.PI / 2) * CONFIG.CHARACTER.MOVE_SPEED;
+                }
+            } else {
+                // World-relative fallback
+                if (this.keys.w) moveVector.z -= CONFIG.CHARACTER.MOVE_SPEED;
+                if (this.keys.s) moveVector.z += CONFIG.CHARACTER.MOVE_SPEED;
+                if (this.keys.a) moveVector.x -= CONFIG.CHARACTER.MOVE_SPEED;
+                if (this.keys.d) moveVector.x += CONFIG.CHARACTER.MOVE_SPEED;
+            }
+
             if (moveVector.length() > 0) {
                 this.character.position.add(moveVector);
                 const targetRotation = Math.atan2(moveVector.x, moveVector.z);
                 this.character.rotation.y = targetRotation;
             }
-            
+
             // Simple jumping
             if (this.keys.space && this.character.position.y < CONFIG.CHARACTER.JUMP_THRESHOLD) {
                 this.character.position.y += CONFIG.CHARACTER.JUMP_FORCE;
             }
-            
+
             // Simple gravity
             if (this.character.position.y > CONFIG.CHARACTER.GROUND_LEVEL) {
                 this.character.position.y -= CONFIG.CHARACTER.GRAVITY;

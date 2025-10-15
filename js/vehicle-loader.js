@@ -211,17 +211,12 @@ export class VehicleLoader {
             // Main Street (horizontal) - cars on left side, facing east
             { x: -10, z: -1.2, color: 0xFFD700, rotation: 0 },
             { x: 10, z: -1.2, color: 0x0000FF, rotation: 0 },
-            
-            // Residential streets (horizontal) - cars on left side, facing east
-            { x: -15, z: 18.5, color: 0x32CD32, rotation: 0 },
-            { x: 15, z: 18.5, color: 0xFF69B4, rotation: 0 },
-            { x: -15, z: -18.5, color: 0xFF4500, rotation: 0 },
-            { x: 15, z: -18.5, color: 0x9370DB, rotation: 0 },
-            
+
             // Vertical roads - cars on left side, facing north
-            { x: -1.2, z: 17, color: 0x8B4513, rotation: Math.PI/2 },
-            { x: 1.2, z: 17, color: 0xDC143C, rotation: Math.PI/2 },
-            { x: -1.2, z: -12, color: 0x4169E1, rotation: Math.PI/2 }
+            { x: -1.2, z: 17, color: 0x8B4513, rotation: Math.PI/2 }
+
+            // Reduced from 9 to 3 vehicles for performance
+            // Removed: 6 additional vehicles
         ];
         
         console.log('🚗 Loading vehicle fleet with external models...');

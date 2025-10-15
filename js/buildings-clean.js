@@ -121,23 +121,13 @@ export function createResidentialDistrict() {
     console.log('🏠 Creating Residential District...');
     const buildings = [];
     
-    // Houses in safe areas between roads (moved further from roads)
+    // Houses in safe areas between roads (reduced from 32 to 8 for performance)
     const housePositions = [
-        // North residential area
-        [-35, 35], [-30, 35], [-25, 35], [-20, 35], [-15, 35], [-10, 35],
-        [10, 35], [15, 35], [20, 35], [25, 35], [30, 35], [35, 35],
-        
-        // South residential area
-        [-35, -35], [-30, -35], [-25, -35], [-20, -35], [-15, -35], [-10, -35],
-        [10, -35], [15, -35], [20, -35], [25, -35], [30, -35], [35, -35],
-        
-        // East residential area
-        [35, -30], [35, -25], [35, -20], [35, -15], [35, -10], [35, 10],
-        [35, 15], [35, 20], [35, 25], [35, 30],
-        
-        // West residential area
-        [-35, -30], [-35, -25], [-35, -20], [-35, -15], [-35, -10], [-35, 10],
-        [-35, 15], [-35, 20], [-35, 25], [-35, 30]
+        // North residential area - minimal selection
+        [-35, 35], [-25, 35], [15, 35], [35, 35],
+
+        // South residential area - minimal selection
+        [-35, -35], [-25, -35], [15, -35], [35, -35]
     ];
     
     housePositions.forEach(([x, z], index) => {

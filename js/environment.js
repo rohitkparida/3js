@@ -6,11 +6,13 @@ import {
     createIndustrialDistrict, 
     createPublicSpaces 
 } from './buildings-clean.js';
-import { createTreeForest } from './vegetation-clean.js';
 import { VehicleLoader } from './vehicle-loader.js';
 import { TreeLoader } from './tree-loader.js';
 import { createObjectBody } from './physics.js';
 import { createBoundaryWalls } from './boundaries.js';
+import { TextureUtils } from './utils/texture-utils.js';
+import { LODManager } from './utils/lod-manager.js';
+import { safeLog } from './utils/logger.js';
 
 // Import DRACO Loader if available
 let DRACOLoader;
@@ -30,6 +32,241 @@ export class EnvironmentManager {
         this.buildings = [];
         this.boundaryWalls = [];
         this.animations = [];
+        this.lodManager = null; // Will be initialized with camera
+
+        // Initialize object pools for performance
+        this.initializeObjectPools();
+    }
+    
+    /**
+     * Initialize object pools for better performance
+     */
+    initializeObjectPools() {
+        // Create object pools for frequently used objects to reduce garbage collection
+        this.vector3Pool = {
+            objects: [],
+            get: function(x = 0, y = 0, z = 0) {
+                if (this.objects.length > 0) {
+                    const vec = this.objects.pop();
+                    vec.set(x, y, z);
+                    return vec;
+                }
+                return new THREE.Vector3(x, y, z);
+            },
+            release: function(vec) {
+                if (vec && vec.isVector3) {
+                    this.objects.push(vec);
+                }
+            },
+            size: 0,
+            activeCount: 0,
+            reuseRate: 0
+        };
+        
+        this.box3Pool = {
+            objects: [],
+            get: function() {
+                if (this.objects.length > 0) {
+                    const box = this.objects.pop();
+                    box.makeEmpty();
+                    return box;
+                }
+                return new THREE.Box3();
+            },
+            release: function(box) {
+                if (box && box.isBox3) {
+                    this.objects.push(box);
+                }
+            },
+            size: 0,
+            activeCount: 0,
+            reuseRate: 0
+        };
+        
+        this.matrix4Pool = {
+            objects: [],
+            get: function() {
+                if (this.objects.length > 0) {
+                    return this.objects.pop().identity();
+                }
+                return new THREE.Matrix4();
+            },
+            release: function(matrix) {
+                if (matrix && matrix.isMatrix4) {
+                    this.objects.push(matrix);
+                }
+            },
+            size: 0,
+            activeCount: 0,
+            reuseRate: 0
+        };
+        
+        this.geometryPool = {
+            objects: new Map(),
+            get: function(geometryType, ...args) {
+                const key = `${geometryType}-${args.join('-')}`;
+                if (this.objects.has(key) && this.objects.get(key).length > 0) {
+                    const geo = this.objects.get(key).pop();
+                    geo.computeBoundingBox();
+                    geo.computeBoundingSphere();
+                    return geo;
+                }
+                return new THREE[geometryType](...args);
+            },
+            release: function(geometry) {
+                if (geometry && geometry.isBufferGeometry) {
+                    const key = geometry.type.replace('BufferGeometry', '');
+                    if (!this.objects.has(key)) {
+                        this.objects.set(key, []);
+                    }
+                    this.objects.get(key).push(geometry);
+                }
+            },
+            size: 0,
+            activeCount: 0,
+            reuseRate: 0
+        };
+        
+        // Update pool statistics
+        const updateStats = () => {
+            this.vector3Pool.size = this.vector3Pool.objects.length;
+            this.vector3Pool.activeCount = this.vector3Pool.size;
+            
+            this.box3Pool.size = this.box3Pool.objects.length;
+            this.box3Pool.activeCount = this.box3Pool.size;
+            
+            this.matrix4Pool.size = this.matrix4Pool.objects.length;
+            this.matrix4Pool.activeCount = this.matrix4Pool.size;
+            
+            this.geometryPool.size = Array.from(this.geometryPool.objects.values())
+                .reduce((sum, arr) => sum + arr.length, 0);
+            this.geometryPool.activeCount = this.geometryPool.size;
+            
+            // Schedule next update
+            requestAnimationFrame(updateStats);
+        };
+        
+        // Start updating stats
+        updateStats();
+    }
+    /**
+     * Load and optimize a model with textures
+     * @param {string} url - Path to the model
+     * @param {Object} options - Loading options
+     * @returns {Promise<THREE.Object3D>} The loaded and optimized model
+     */
+    async loadModel(url, options = {}) {
+        try {
+            const loader = new GLTFLoader();
+            
+            // Apply DRACO loader if available
+            if (DRACOLoader) {
+                const dracoLoader = new DRACOLoader();
+                dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+                
+                // Preload the decoder for better performance
+                await new Promise(resolve => {
+                    dracoLoader.preload(() => resolve());
+                });
+                loader.setDRACOLoader(dracoLoader);
+            }
+            
+            // Load the model
+            const gltf = await new Promise((resolve, reject) => {
+                loader.load(url, resolve, (progress) => {
+                    // Optional progress callback - can be empty or omitted
+                }, reject);
+            });
+            
+            let model = gltf.scene || (gltf.scenes && gltf.scenes[0]);
+            
+            // Apply LOD if enabled and we have a camera
+            if (this.lodManager && options.enableLOD !== false) {
+                const lodModel = this.lodManager.createLOD(model, {
+                    highDetailDistance: options.highDetailDistance || 30,
+                    mediumDetailDistance: options.mediumDetailDistance || 60,
+                    lowDetailDistance: options.lowDetailDistance || 120
+                });
+                model = lodModel;
+            }
+            
+            // Optimize all textures in the model
+            model.traverse((node) => {
+                if (node.material) {
+                    const materials = Array.isArray(node.material) ? node.material : [node.material];
+                    materials.forEach(mat => {
+                        this.optimizeMaterialTextures(mat);
+                    });
+                }
+            });
+            
+            return model;
+        } catch (error) {
+            console.error(`Failed to load model ${url}:`, error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Set up LOD manager with camera reference
+     * @param {THREE.Camera} camera - The camera to use for LOD calculations
+     */
+    setCamera(camera) {
+        if (!this.lodManager && camera) {
+            this.lodManager = new LODManager(camera, {
+                highDetailDistance: 30,
+                mediumDetailDistance: 60,
+                lowDetailDistance: 120
+            });
+        } else if (this.lodManager) {
+            this.lodManager.camera = camera;
+        }
+    }
+
+    /**
+     * Update LODs and other dynamic environment elements
+     */
+    update(deltaTime) {
+        // Update LODs
+        if (this.lodManager) {
+            this.lodManager.update();
+        }
+        
+        // Update animations (like fountain water)
+        if (this.animations && this.animations.length > 0) {
+            this.animations.forEach(mixer => {
+                if (mixer && typeof mixer.update === 'function') {
+                    mixer.update(deltaTime);
+                }
+            });
+        }
+    }
+
+    /**
+     * Optimize all textures in a material
+     * @param {THREE.Material} material - The material to optimize
+     */
+    optimizeMaterialTextures(material) {
+        if (!material) return;
+        
+        const textureMaps = [
+            'map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap',
+            'emissiveMap', 'alphaMap', 'envMap', 'lightMap', 'displacementMap',
+            'bumpMap', 'specularMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap',
+            'clearcoatMap', 'sheenColorMap', 'sheenRoughnessMap', 'transmissionMap',
+            'thicknessMap', 'specularIntensityMap', 'specularColorMap', 'iridescenceMap',
+            'iridescenceThicknessMap', 'anisotropyMap', 'clearcoatNormalScale', 'sheen'
+        ];
+        
+        textureMaps.forEach(mapName => {
+            if (material[mapName]) {
+                const isNormalMap = mapName.toLowerCase().includes('normal');
+                material[mapName] = TextureUtils.optimize(material[mapName], {
+                    generateMipmaps: !isNormalMap,
+                    anisotropy: isNormalMap ? 1 : 4
+                });
+            }
+        });
     }
     
     async create() {
@@ -82,14 +319,14 @@ export class EnvironmentManager {
         if (optimizationReport) {
             console.log('\n=== ENVIRONMENT OPTIMIZATION REPORT ===');
             console.log(optimizationReport.optimizationSuggestions);
-            
+
             // Log object counts
             console.log('\n📦 Object Counts:');
             console.log(`- Trees: ${this.trees.length}`);
-            console.log(`- Buildings: ${this.buildings.length}`);
+            console.log(`- buildings: ${this.buildings.length}`);
             console.log(`- Rocks: ${this.terrainRef?.userData?.rocks?.length || 0}`);
             console.log(`- Vehicles: ${this.vehicles?.length || 0}`);
-            
+
             // Log any optimization suggestions
             if (optimizationReport.problemZones && optimizationReport.problemZones.length > 0) {
                 console.log('\n⚠️  Problem Areas:');
@@ -97,7 +334,7 @@ export class EnvironmentManager {
                     console.log(`- ${zone.area}: ${zone.issue} (${zone.count} objects)`);
                 });
             }
-            
+
             console.log('=======================================\n');
         }
         
@@ -275,38 +512,32 @@ export class EnvironmentManager {
     
     createPhysicsBodies() {
         if (typeof CANNON !== 'undefined' && this.world) {
-            // First clear any existing physics bodies
-            this.objectBodies = [];
-            
-            // Add physics bodies for regular objects
-            this.objects.forEach((obj) => {
-                if (obj) {
-                    const body = createObjectBody(this.world, obj);
-                    this.objectBodies.push(body);
-                } else {
-                    this.objectBodies.push(null);
-                }
-            });
-            
-            // Add physics bodies for buildings
-            this.buildings.forEach((building) => {
-                if (building) {
-                    // Create a static physics body for the building
-                    const body = createObjectBody(this.world, building, { mass: 0 }); // Mass of 0 makes it static
-                    this.objectBodies.push(body);
-                }
-            });
-        }
-    }
-    
-    update() {
-        // Sync objects with physics bodies
-        this.objects.forEach((obj, index) => {
-            if (this.objectBodies[index]) {
-                obj.position.copy(this.objectBodies[index].position);
-                obj.quaternion.copy(this.objectBodies[index].quaternion);
+            try {
+                // First clear any existing physics bodies
+                this.objectBodies = [];
+                
+                // Add physics bodies for regular objects
+                this.objects.forEach((obj) => {
+                    if (obj) {
+                        const body = createObjectBody(this.world, obj);
+                        this.objectBodies.push(body);
+                    } else {
+                        this.objectBodies.push(null);
+                    }
+                });
+                
+                // Add physics bodies for buildings
+                this.buildings.forEach((building) => {
+                    if (building) {
+                        // Create a static physics body for the building
+                        const body = createObjectBody(this.world, building, { mass: 0 }); // Mass of 0 makes it static
+                        this.objectBodies.push(body);
+                    }
+                });
+            } catch (error) {
+                console.error('Error creating physics bodies:', error);
             }
-        });
+        }
         
         // Animate trees (gentle swaying) - only for fallback trees
         const time = Date.now() * 0.001;
@@ -334,7 +565,7 @@ export class EnvironmentManager {
     }
 
     // Optimize object placement to avoid collisions and generate optimization report
-    optimizeObjectPlacement(terrain, roads, buildings, trees = []) {
+    optimizeObjectPlacement(terrain, roads, buildings, trees) {
         const problemZones = [];
         
         // Check for high-density areas
@@ -421,15 +652,17 @@ export class EnvironmentManager {
         }
         
         // Add trees to optimization
-        trees.forEach((tree, index) => {
-            allObjects.push({
-                type: 'tree',
-                mesh: tree,
-                originalPosition: tree.position.clone(),
-                size: new THREE.Box3().setFromObject(tree).getSize(new THREE.Vector3()).length(),
-                priority: 1
+        if (trees) {
+            trees.forEach((tree, index) => {
+                allObjects.push({
+                    type: 'tree',
+                    mesh: tree,
+                    originalPosition: tree.position.clone(),
+                    size: new THREE.Box3().setFromObject(tree).getSize(new THREE.Vector3()).length(),
+                    priority: 1
+                });
             });
-        });
+        }
         
         // Sort by priority (and size for objects with same priority)
         allObjects.sort((a, b) => (b.priority - a.priority) || (b.size - a.size));
@@ -613,27 +846,14 @@ export class EnvironmentManager {
                            `to (${mesh.position.x.toFixed(1)}, ${mesh.position.z.toFixed(1)}) ` +
                            `after ${tries} step(s) (${totalNudgeDistance.toFixed(2)} units)`);
             }
-        });
-        
+        }); // Added missing closing brace for forEach callback
         // Log optimization report
         if (optimizationReport.nudgedObjects > 0) {
-            console.log('\n=== OBJECT PLACEMENT OPTIMIZATION REPORT ===');
-            console.log(`Total objects processed: ${optimizationReport.totalObjects}`);
-            console.log(`Objects that needed nudging: ${optimizationReport.nudgedObjects} (${((optimizationReport.nudgedObjects/optimizationReport.totalObjects)*100).toFixed(1)}%)`);
-            console.log(`Total nudges performed: ${optimizationReport.totalNudges}`);
-            console.log(`Maximum nudges for a single object: ${optimizationReport.maxNudges}`);
-            
-            // Show type-specific statistics
-            Object.entries(optimizationReport.statsByType).forEach(([type, stats]) => {
-                console.log(`\n📊 ${type.charAt(0).toUpperCase() + type.slice(1)}s:`);
-                console.log(`- ${stats.count} needed nudging`);
-                console.log(`- Total nudges: ${stats.totalNudges}`);
-                console.log(`- Average nudges per object: ${(stats.totalNudges / stats.count).toFixed(1)}`);
-                console.log(`- Total nudge distance: ${stats.totalDistance.toFixed(2)} units`);
+            safeLog.info('Object placement optimization completed', 'PHYSICS', {
+                totalObjects: optimizationReport.totalObjects,
+                nudgedObjects: optimizationReport.nudgedObjects,
+                totalNudges: optimizationReport.totalNudges
             });
-            
-            console.log('\n' + optimizationReport.optimizationSuggestions);
-            console.log('===========================================\n');
             
             // Generate code snippets for optimized positions by type
             const optimizedByType = {};
@@ -658,16 +878,71 @@ export class EnvironmentManager {
                     })
                     .join('\n');
                 
-                console.log(`💡 Optimized ${type} positions (${objects.length} objects):\n` + optimizedPositions + '\n');
+                safeLog.debug(`Optimized ${type} positions`, 'PHYSICS', { count: objects.length, positions: optimizedPositions });
             });
         } else {
-            console.log('✅ No objects needed nudging - great job on the placement!');
+            safeLog.info('No objects needed nudging - great job on the placement!', 'PHYSICS');
         }
-        
+
         return optimizationReport;
     }
 
     // Simple decorative archway: two pillars + semicircular top
+    
+    /**
+     * Clean up resources
+     */
+    dispose() {
+        // Clean up LOD resources
+        if (this.lodManager) {
+            this.lodManager.dispose();
+            this.lodManager = null;
+        }
+
+        // Clean up object pools
+        if (this.vector3Pool) {
+            this.vector3Pool.dispose();
+            this.vector3Pool = null;
+        }
+        if (this.box3Pool) {
+            this.box3Pool.dispose();
+            this.box3Pool = null;
+        }
+        if (this.matrix4Pool) {
+            this.matrix4Pool.dispose();
+            this.matrix4Pool = null;
+        }
+        if (this.geometryPool) {
+            this.geometryPool.dispose();
+            this.geometryPool = null;
+        }
+
+        // Clean up objects
+        this.objects.forEach(obj => {
+            if (obj && typeof obj.dispose === 'function') {
+                obj.dispose();
+            }
+        });
+
+        // Clear arrays
+        this.objects = [];
+        this.objectBodies = [];
+        this.trees = [];
+        this.roads = [];
+        this.buildings = [];
+        this.boundaryWalls = [];
+        this.animations = [];
+
+        // Clear texture cache
+        this.textureCache.clear();
+    }
+    
+    /**
+     * Create an archway at the specified position
+     * @param {number} x - X position
+     * @param {number} z - Z position
+     * @returns {THREE.Group} The created archway
+     */
     createArchway(x, z) {
         const group = new THREE.Group();
         const pillarMat = new THREE.MeshLambertMaterial({ color: 0x777777 });
@@ -749,7 +1024,9 @@ export class EnvironmentManager {
 
                         resolve(arch);
                     },
-                    undefined,
+                    (progress) => {
+                        // Optional progress callback - can be empty or omitted
+                    },
                     (err) => reject(err)
                 );
             } catch (e) {
@@ -864,7 +1141,9 @@ export class EnvironmentManager {
                     group.name = 'logo_podium';
                     resolve(group);
                 },
-                undefined,
+                (progress) => {
+                    // Optional progress callback - can be empty or omitted
+                },
                 () => resolve(group)
             );
         });
@@ -934,7 +1213,9 @@ export class EnvironmentManager {
                     try { this.groundObject(model); } catch (_) {}
                     resolve(model);
                 },
-                undefined,
+                (progress) => {
+                    // Optional progress callback - can be empty or omitted
+                },
                 () => resolve(null)
             );
         });
@@ -1000,8 +1281,13 @@ export class EnvironmentManager {
 
                     resolve(rig);
                 },
-                undefined,
-                () => resolve(null)
+                (progress) => {
+                    // Optional progress callback - can be empty or omitted
+                },
+                (error) => {
+                    console.error('❌ Tripod camera loading failed:', error);
+                    resolve(null);
+                }
             );
         });
     }
@@ -1166,5 +1452,109 @@ export class EnvironmentManager {
                 }
             );
         });
+    }
+
+    /**
+     * Get a pooled Vector3 object for calculations
+     * @param {number} x - X coordinate
+     * @param {number} y - Y coordinate
+     * @param {number} z - Z coordinate
+     * @returns {THREE.Vector3} Pooled vector object
+     */
+    getPooledVector3(x = 0, y = 0, z = 0) {
+        if (this.vector3Pool) {
+            const vec = this.vector3Pool.get();
+            if (vec) {
+                vec.set(x, y, z);
+                return vec;
+            }
+        }
+        // Fallback to direct creation
+        return new THREE.Vector3(x, y, z);
+    }
+
+    /**
+     * Release a pooled Vector3 object back to the pool
+     * @param {THREE.Vector3} vec - Vector to release
+     */
+    releasePooledVector3(vec) {
+        if (this.vector3Pool && vec && vec._isPooled) {
+            this.vector3Pool.release(vec);
+        }
+    }
+
+    /**
+     * Get a pooled Box3 object for calculations
+     * @returns {THREE.Box3} Pooled box object
+     */
+    getPooledBox3() {
+        if (this.box3Pool) {
+            return this.box3Pool.get();
+        }
+        // Fallback to direct creation
+        return new THREE.Box3();
+    }
+
+    /**
+     * Release a pooled Box3 object back to the pool
+     * @param {THREE.Box3} box - Box to release
+     */
+    releasePooledBox3(box) {
+        if (this.box3Pool && box && box._isPooled) {
+            this.box3Pool.release(box);
+        }
+    }
+
+    /**
+     * Get object pool statistics
+     * @returns {Object} Pool statistics by type
+     */
+    getPoolStats() {
+        const stats = {};
+
+        if (this.vector3Pool) {
+            stats.vector3 = {
+                poolSize: this.vector3Pool.size,
+                activeCount: this.vector3Pool.activeCount,
+                reuseRate: this.vector3Pool.reuseRate
+            };
+        }
+
+        if (this.box3Pool) {
+            stats.box3 = {
+                poolSize: this.box3Pool.size,
+                activeCount: this.box3Pool.activeCount,
+                reuseRate: this.box3Pool.reuseRate
+            };
+        }
+
+        if (this.matrix4Pool) {
+            stats.matrix4 = {
+                poolSize: this.matrix4Pool.size,
+                activeCount: this.matrix4Pool.activeCount,
+                reuseRate: this.matrix4Pool.reuseRate
+            };
+        }
+        if (this.geometryPool) {
+            stats.geometry = {
+                poolSize: this.geometryPool.size,
+                activeCount: this.geometryPool.activeCount,
+                reuseRate: this.geometryPool.reuseRate
+            };
+        }
+
+        return stats;
+    }
+
+    /**
+     * Show real-time pool statistics in console
+     */
+    showPoolStats() {
+        const stats = this.getPoolStats();
+        console.log(' Object Pool Statistics:');
+        Object.entries(stats).forEach(([type, data]) => {
+            console.log(`  ${type}: ${data.poolSize} pooled, ${data.activeCount} active, ${data.reuseRate} reuse rate`);
+        });
+        return stats;
     }
 }
