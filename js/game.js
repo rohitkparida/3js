@@ -56,7 +56,13 @@ export class Game {
             ];
 
             // Create and configure preloader (works in background)
-            this.assetPreloader = new AssetPreloader();
+            // Calculate correct base path for GitHub Pages
+            const isGitHubPages = window.location.hostname.includes('github.io');
+            const repoName = '3js';
+            const basePath = isGitHubPages && window.location.pathname.includes(`/${repoName}/`)
+                ? `/${repoName}/`
+                : '';
+            this.assetPreloader = new AssetPreloader(basePath);
 
             // Set up progress and error callbacks
             this.assetPreloader.onProgress = (progress, loaded, total) => {

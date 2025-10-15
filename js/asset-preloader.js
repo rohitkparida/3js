@@ -1,6 +1,7 @@
 // Asset Preloader - Safe Implementation with comprehensive error handling
 export class AssetPreloader {
-    constructor() {
+    constructor(basePath = '') {
+        this.basePath = basePath;
         this.cache = new Map();
         this.loadingPromises = new Map();
         this.failedAssets = new Set();
@@ -199,9 +200,13 @@ export class AssetPreloader {
      */
     async performAssetLoad(url) {
         try {
+            // Construct full URL with base path for GitHub Pages
+            const baseUrl = this.basePath || '';
+            const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+
             // Use modern fetch API with fallback
             if (typeof fetch !== 'undefined') {
-                const response = await fetch(url);
+                const response = await fetch(fullUrl);
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -219,7 +224,7 @@ export class AssetPreloader {
                 // Fallback for very old browsers
                 return new Promise((resolve, reject) => {
                     const xhr = new XMLHttpRequest();
-                    xhr.open('GET', url, true);
+                    xhr.open('GET', fullUrl, true);
                     xhr.responseType = 'arraybuffer';
 
                     xhr.onload = () => {
