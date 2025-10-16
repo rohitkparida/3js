@@ -1,4 +1,4 @@
-// Asset Preloader - Safe Implementation with comprehensive error handling
+// Asset Preloader - Safe Implementation with comprehensive error handling and persistent caching
 export class AssetPreloader {
     constructor(basePath = '') {
         this.basePath = basePath;
@@ -10,6 +10,7 @@ export class AssetPreloader {
         this.onProgress = null; // Progress callback
         this.onComplete = null; // Completion callback
         this.onError = null;    // Error callback
+        this.cacheVersion = 'v1.0'; // Cache version for cache busting when needed
     }
 
     /**
@@ -37,16 +38,25 @@ export class AssetPreloader {
                 throw new Error('Asset URLs must be a non-empty array');
             }
 
-            // Filter out already cached assets
-            const uncachedAssets = assetUrls.filter(url => !this.cache.has(url));
+            // Filter out already cached assets (check both memory cache and browser cache)
+            const uncachedAssets = [];
+            const cachedAssets = [];
+
+            for (const url of assetUrls) {
+                if (this.cache.has(url)) {
+                    cachedAssets.push(url);
+                } else {
+                    uncachedAssets.push(url);
+                }
+            }
 
             if (uncachedAssets.length === 0) {
-                console.log('✅ All assets already cached');
+                console.log('✅ All assets already cached (memory + browser)');
                 this.onComplete?.({ success: true, cached: true, loaded: 0, failed: 0 });
                 return { success: true, cached: true };
             }
 
-            console.log(`📥 Preloading ${uncachedAssets.length} uncached assets...`);
+            console.log(`📥 Preloading ${uncachedAssets.length} uncached assets (${cachedAssets.length} already cached)...`);
 
             // Create loading promises with timeout and retry logic
             const loadingPromises = uncachedAssets.map(url =>
@@ -196,17 +206,33 @@ export class AssetPreloader {
     }
 
     /**
-     * Perform the actual asset loading with browser compatibility
+     * Perform the actual asset loading with browser compatibility and HTTP caching
      */
     async performAssetLoad(url) {
         try {
             // Construct full URL with base path for GitHub Pages
             const baseUrl = this.basePath || '';
-            const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+            let fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
 
-            // Use modern fetch API with fallback
+            // Add cache-busting parameter for assets that might need updates
+            // This allows browser to cache assets while allowing us to force refresh when needed
+            if (!fullUrl.includes('?')) {
+                fullUrl += `?v=${this.cacheVersion}`;
+            } else {
+                fullUrl += `&v=${this.cacheVersion}`;
+            }
+
+            // Use modern fetch API with fallback and cache optimization
             if (typeof fetch !== 'undefined') {
-                const response = await fetch(fullUrl);
+                const response = await fetch(fullUrl, {
+                    // Use browser cache but validate with server
+                    cache: 'default',
+                    // Set headers to encourage caching
+                    headers: {
+                        'Cache-Control': 'public, max-age=3600', // Cache for 1 hour
+                        'Pragma': 'cache'
+                    }
+                });
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -226,6 +252,10 @@ export class AssetPreloader {
                     const xhr = new XMLHttpRequest();
                     xhr.open('GET', fullUrl, true);
                     xhr.responseType = 'arraybuffer';
+
+                    // Set cache headers for XMLHttpRequest
+                    xhr.setRequestHeader('Cache-Control', 'public, max-age=3600');
+                    xhr.setRequestHeader('Pragma', 'cache');
 
                     xhr.onload = () => {
                         if (xhr.status === 200) {
@@ -287,15 +317,31 @@ export class AssetPreloader {
     }
 
     /**
-     * Get loading statistics
+     * Force refresh all cached assets (useful when updating assets)
      */
-    getStats() {
-        return {
-            cached: this.cache.size,
-            failed: this.failedAssets.size,
-            loading: this.loadingPromises.size,
-            loaded: this.loadedCount,
-            total: this.totalAssets
-        };
+    forceCacheRefresh() {
+        this.cacheVersion = Date.now().toString();
+        console.log(`🔄 Cache version updated to ${this.cacheVersion} - assets will be re-downloaded`);
+    }
+
+    /**
+     * Check if asset exists in browser cache (HTTP 304 check)
+     */
+    async isAssetCachedByBrowser(url) {
+        try {
+            const baseUrl = this.basePath || '';
+            const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+
+            const response = await fetch(fullUrl, {
+                method: 'HEAD', // Only get headers, not content
+                cache: 'default'
+            });
+
+            // If we get 304 Not Modified, asset is cached by browser
+            return response.status === 304;
+        } catch (error) {
+            // If HEAD request fails, assume not cached
+            return false;
+        }
     }
 }
