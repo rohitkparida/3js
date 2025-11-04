@@ -155,12 +155,10 @@ export class AssetPreloader {
     /**
      * Load asset with timeout protection
      */
-    async loadAssetWithTimeout(url, timeout) {
+    async loadAssetWithTimeout(url, baseTimeout) {
         return new Promise(async (resolve, reject) => {
-            // Set up timeout
-            const timeoutId = setTimeout(() => {
-                reject(new Error(`Asset load timeout: ${url}`));
-            }, timeout);
+            // Will be set after we get the Content-Length
+            let timeoutId;
 
             try {
                 // Check cache first
@@ -247,19 +245,52 @@ export class AssetPreloader {
                     }
                 });
 
+                const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
                 console.log(`📥 Response for ${url}:
                     Status: ${response.status}
                     Status Text: ${response.statusText}
                     Content-Type: ${response.headers.get('content-type')}
-                    Content-Length: ${response.headers.get('content-length')}`);
+                    Content-Length: ${contentLength} bytes`);
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
 
-                // Handle different asset types
-                const contentType = response.headers.get('content-type') || '';
+                // For large files, use streaming to show progress
+                if (contentLength > 5 * 1024 * 1024) { // Over 5MB
+                    const reader = response.body.getReader();
+                    const chunks = [];
+                    let receivedLength = 0;
 
+                    while(true) {
+                        const {done, value} = await reader.read();
+                        
+                        if (done) {
+                            break;
+                        }
+
+                        chunks.push(value);
+                        receivedLength += value.length;
+                        
+                        // Calculate and report progress
+                        const progress = (receivedLength / contentLength) * 100;
+                        console.log(`📊 Loading ${url}: ${progress.toFixed(1)}% (${receivedLength}/${contentLength} bytes)`);
+                        this.updateProgress();
+                    }
+
+                    // Concatenate chunks
+                    const allChunks = new Uint8Array(receivedLength);
+                    let position = 0;
+                    for(const chunk of chunks) {
+                        allChunks.set(chunk, position);
+                        position += chunk.length;
+                    }
+
+                    return allChunks.buffer;
+                }
+
+                // Handle different asset types for smaller files
+                const contentType = response.headers.get('content-type') || '';
                 if (contentType.includes('text') || url.endsWith('.obj') || url.endsWith('.gltf')) {
                     return await response.text();
                 } else {
