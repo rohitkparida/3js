@@ -374,26 +374,26 @@ export class EnvironmentManager {
             }
         } catch (_) {}
 
-        // Add reporter model near the podium
-        try {
-            const reporter = await this.loadAndPlaceReporter('models/reporter.gltf', { x: 12, z: -64 }, -Math.PI / 6);
-            if (reporter) {
-                this.scene.add(reporter);
-                // Do NOT add reporter to physics-managed objects to avoid floating from box bodies
-            }
-        } catch (_) {}
+        // Reporter model disabled
+        // try {
+        //     const reporter = await this.loadAndPlaceReporter('models/reporter.gltf', { x: 12, z: -64 }, -Math.PI / 6);
+        //     if (reporter) {
+        //         this.scene.add(reporter);
+        //         // Do NOT add reporter to physics-managed objects to avoid floating from box bodies
+        //     }
+        // } catch (_) {}
 
-        // Add tripod camera to film the reporter
-        try {
-            if (this.scene) {
-                const reporterObj = this.scene.getObjectByName('reporter_npc');
-                const cameraRig = await this.loadAndPlaceTripodCamera('models/camera.glb', reporterObj, { distance: 3.2, height: 1.4, azimuth: Math.PI * 0.12 });
-                if (cameraRig) {
-                    this.scene.add(cameraRig);
-                    // Not adding to physics; decorative and static
-                }
-            }
-        } catch (_) {}
+        // Tripod camera disabled (was filming reporter)
+        // try {
+        //     if (this.scene) {
+        //         const reporterObj = this.scene.getObjectByName('reporter_npc');
+        //         const cameraRig = await this.loadAndPlaceTripodCamera('models/camera.glb', reporterObj, { distance: 3.2, height: 1.4, azimuth: Math.PI * 0.12 });
+        //         if (cameraRig) {
+        //             this.scene.add(cameraRig);
+        //             // Not adding to physics; decorative and static
+        //         }
+        //     }
+        // } catch (_) {}
 
         // Add animated fountain near spawn
         try {

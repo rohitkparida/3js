@@ -43,8 +43,6 @@ export class Game {
                 './models/archway.glb',      // Architectural elements
                 './models/restaurant.glb',   // Buildings
                 './models/logo.glb',         // Important branding elements
-                './models/reporter.gltf',    // Character/object models
-                './models/reporter.jpeg',    // Associated textures
                 './models/camera.glb',       // Scene objects
                 './models/car1.glb',         // Vehicles
                 './models/car2.glb'          // More vehicles
@@ -82,11 +80,20 @@ export class Game {
             // Start preloading in background (non-blocking)
             console.log('🚀 Starting asset preloading...');
             const startTime = Date.now();
+            
+            // Identify large assets that need special handling
+            const largeAssets = allAssets.filter(asset => 
+                asset.includes('reporter.gltf') || 
+                asset.includes('mascot.obj') ||
+                asset.includes('fountain')
+            );
+            
             const preloadResult = await this.assetPreloader.preloadAssets(allAssets, {
                 criticalAssets,
-                timeout: 30000,
-                maxConcurrent: 6,
-                retryAttempts: 3
+                largeAssets,
+                timeout: 120000, // 2 minutes for large files
+                maxConcurrent: 3, // Reduced concurrency for better stability
+                retryAttempts: 2  // Fewer retries for large files
             });
 
             if (preloadResult.success) {

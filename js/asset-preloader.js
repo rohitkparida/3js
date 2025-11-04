@@ -21,11 +21,17 @@ export class AssetPreloader {
      */
     async preloadAssets(assetUrls, options = {}) {
         const {
-            timeout = 60000,        // 60 second timeout (increased for larger assets)
-            maxConcurrent = 4,      // Reduced concurrent downloads to prevent timeouts
-            retryAttempts = 3,      // Retry failed downloads
-            criticalAssets = []     // Assets that must load for game to start
+            timeout = 120000,       // 120 second timeout for large models
+            maxConcurrent = 2,      // Reduced concurrent downloads for large files
+            retryAttempts = 2,      // Fewer retry attempts for large files
+            criticalAssets = [],    // Assets that must load for game to start
+            largeAssets = []        // List of large assets that need special handling
         } = options;
+
+        // Special handling for large assets
+        const isLargeAsset = (url) => {
+            return largeAssets.includes(url) || url.includes('reporter.gltf');
+        };
 
         this.totalAssets = assetUrls.length;
         this.loadedCount = 0;
