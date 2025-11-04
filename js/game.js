@@ -35,8 +35,8 @@ export class Game {
 
             // Define critical assets for your game (all major 3D models)
             const criticalAssets = [
-                './models/mascot.obj',
-                './models/mascot.png',
+                './models/simplify_mascot.obj',  // Optimized mascot model
+                './models/mascot.png',           // Mascot texture
                 './models/skybox.glb',
                 './models/fountain_optimized.glb',     // Large central environment object (optimized version)
                 './models/tree.glb',         // Trees used throughout environment
