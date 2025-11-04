@@ -168,47 +168,23 @@ export class CollisionDetector {
         console.log(`📊 Added ${this.roadPositions.length} road positions for collision detection`);
     }
 
-    // Add building positions for collision detection (more precise colliders)
+    // Add building positions for collision detection
     addBuildings(buildings) {
         this.buildingPositions = [];
-        buildings.forEach((building, index) => {
+        buildings.forEach(building => {
             if (building.children && building.children.length > 0) {
-                // Find the main building structure (usually the largest child)
-                let mainStructure = building.children[0];
-                let maxVolume = 0;
-
-                building.children.forEach(child => {
-                    if (child.geometry) {
-                        const box = new THREE.Box3().setFromObject(child);
-                        const size = box.getSize(new THREE.Vector3());
-                        const volume = size.x * size.y * size.z;
-
-                        if (volume > maxVolume) {
-                            maxVolume = volume;
-                            mainStructure = child;
-                        }
-                    }
-                });
-
-                // Use main structure for collision (smaller, more accurate)
-                const box = new THREE.Box3().setFromObject(mainStructure);
+                // Get bounding box for building group
+                const box = new THREE.Box3().setFromObject(building);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
-
-                // Make collider slightly smaller than visual mesh
-                const colliderScale = 0.85; // 15% smaller than visual
-
+                
                 this.buildingPositions.push({
                     x: center.x,
                     z: center.z,
-                    width: size.x * colliderScale,
-                    height: size.z * colliderScale,
-                    type: 'building',
-                    mesh: building,
-                    index: index
+                    width: size.x,
+                    height: size.z,
+                    type: 'building'
                 });
-
-                console.log(`🏢 Building ${index + 1} collider: ${size.x.toFixed(1)}×${size.z.toFixed(1)} → ${size.x * colliderScale.toFixed(1)}×${size.z * colliderScale.toFixed(1)}`);
             }
         });
         console.log(`🏢 Added ${this.buildingPositions.length} building positions for collision detection`);
@@ -217,30 +193,22 @@ export class CollisionDetector {
     // Add tree positions for collision detection
     addTrees(trees) {
         this.treePositions = [];
-        trees.forEach((tree, index) => {
+        trees.forEach(tree => {
             const position = tree.position;
             const scale = tree.scale;
-            // Reduced from 1.5x to 1.2x for more accurate tree colliders
-            const radius = 1.2 * Math.max(scale.x, scale.z); // More accurate tree canopy radius
-
+            const radius = 1.5 * Math.max(scale.x, scale.z); // Tree canopy radius
+            
             this.treePositions.push({
                 x: position.x,
                 z: position.z,
                 radius: radius,
-                type: 'tree',
-                mesh: tree,
-                index: index
+                type: 'tree'
             });
-
-            // Log tree collider sizes for debugging
-            if (index < 5) { // Only log first few to avoid spam
-                console.log(`🌳 Tree ${index + 1} collider radius: ${radius.toFixed(1)} (scale: ${scale.x.toFixed(1)})`);
-            }
         });
         console.log(`🌳 Added ${this.treePositions.length} tree positions for collision detection`);
     }
 
-    // Add rocks from terrain.userData.rocks if available (more precise colliders)
+    // Add rocks from terrain.userData.rocks if available
     addRocksFromTerrain(terrain) {
         this.rockPositions = [];
         const rocks = terrain && terrain.userData && terrain.userData.rocks ? terrain.userData.rocks : [];
@@ -248,24 +216,13 @@ export class CollisionDetector {
             const box = new THREE.Box3().setFromObject(rock);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
-
-            // Make rock colliders smaller and more precise
-            const colliderScale = 0.8; // 20% smaller than visual
-
             this.rockPositions.push({
                 x: center.x,
                 z: center.z,
-                width: size.x * colliderScale,
-                height: size.z * colliderScale,
-                type: 'rock',
-                mesh: rock,
-                index: i
+                width: size.x,
+                height: size.z,
+                type: 'rock'
             });
-
-            // Log first few rock colliders for debugging
-            if (i < 3) {
-                console.log(`🪨 Rock ${i + 1} collider: ${size.x.toFixed(1)}×${size.z.toFixed(1)} → ${size.x * colliderScale.toFixed(1)}×${size.z * colliderScale.toFixed(1)}`);
-            }
         });
         console.log(`🪨 Added ${this.rockPositions.length} rock positions for collision detection`);
     }

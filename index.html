@@ -65,7 +65,7 @@
     <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
     
     <!-- BVH optimization for collision detection and raycasting -->
-    <script src="https://unpkg.com/three-mesh-bvh@0.7.0/build/index.js"></script>
+    <script src="https://unpkg.com/three-mesh-bvh@0.7.0/build/index.umd.js"></script>
     
     <!-- Physics -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
@@ -97,11 +97,10 @@
         // Initialize BVH acceleration for raycasting (must be after Three.js is loaded)
         if (typeof THREE !== 'undefined') {
             try {
-                // Enable accelerated raycasting globally
+                // Enable accelerated raycasting globally (UMD build exposes to global)
                 if (THREE.Mesh && typeof THREE !== 'undefined') {
-                    // Import and enable accelerated raycasting
-                    // This will be available when three-mesh-bvh loads
-                    console.log('🔧 BVH raycasting acceleration ready');
+                    // BVH library should be available globally after loading
+                    console.log('🔧 BVH raycasting acceleration ready (UMD)');
                 }
             } catch (error) {
                 console.warn('⚠️ BVH initialization issue:', error);

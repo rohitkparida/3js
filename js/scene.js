@@ -342,7 +342,7 @@ export function setupLighting(scene) {
         if (CONFIG.SCENE.ENABLE_SKYBOX && THREE && THREE.GLTFLoader) {
             const loader = new THREE.GLTFLoader();
             loader.load(
-                'models/skybox.glb',
+                './models/skybox.glb',
                 (gltf) => {
                     const skybox = gltf.scene;
                     // Ensure materials render as a backdrop without killing embedded textures
@@ -394,7 +394,7 @@ export function setupLighting(scene) {
     if (CONFIG.SCENE.ENABLE_SKY_IMAGE) {
         try {
             const texLoader = new THREE.TextureLoader();
-            const candidates = ['models/skybox.jpg', 'models/skybox.png', 'models/sky.jpg', 'models/sky.png'];
+            const candidates = ['./models/skybox.jpg', './models/skybox.png', './models/sky.jpg', './models/sky.png'];
             const tryNext = (i) => {
                 if (i >= candidates.length) return;
                 texLoader.load(
