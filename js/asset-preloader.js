@@ -21,8 +21,8 @@ export class AssetPreloader {
      */
     async preloadAssets(assetUrls, options = {}) {
         const {
-            timeout = 30000,        // 30 second timeout
-            maxConcurrent = 6,      // Max simultaneous downloads
+            timeout = 60000,        // 60 second timeout (increased for larger assets)
+            maxConcurrent = 4,      // Reduced concurrent downloads to prevent timeouts
             retryAttempts = 3,      // Retry failed downloads
             criticalAssets = []     // Assets that must load for game to start
         } = options;
@@ -214,11 +214,17 @@ export class AssetPreloader {
             const baseUrl = this.basePath ? `${this.basePath}/` : '';
             let fullUrl = url.startsWith('http') ? url : `${baseUrl}${url.replace(/^\.?\//, '')}`;
 
+            // Add absolute URL origin for GitHub Pages when needed
+            if (window.location.hostname.includes('github.io') && !fullUrl.startsWith('http')) {
+                fullUrl = `${window.location.origin}${fullUrl}`;
+            }
+
             // Log URL construction for debugging
             console.log(`🔍 Asset URL construction:
                 Base URL: "${baseUrl}"
                 Input URL: "${url}"
-                Final URL: "${fullUrl}"`);
+                Final URL: "${fullUrl}"
+                Origin: "${window.location.origin}"`);
 
             // Add cache-busting parameter for assets that might need updates
             // This allows browser to cache assets while allowing us to force refresh when needed
@@ -230,6 +236,7 @@ export class AssetPreloader {
 
             // Use modern fetch API with fallback and cache optimization
             if (typeof fetch !== 'undefined') {
+                console.log(`🌐 Fetching asset: ${fullUrl}`);
                 const response = await fetch(fullUrl, {
                     // Use browser cache but validate with server
                     cache: 'default',
@@ -239,6 +246,12 @@ export class AssetPreloader {
                         'Pragma': 'cache'
                     }
                 });
+
+                console.log(`📥 Response for ${url}:
+                    Status: ${response.status}
+                    Status Text: ${response.statusText}
+                    Content-Type: ${response.headers.get('content-type')}
+                    Content-Length: ${response.headers.get('content-length')}`);
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
