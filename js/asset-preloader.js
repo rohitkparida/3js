@@ -212,7 +212,13 @@ export class AssetPreloader {
         try {
             // Construct full URL with base path for GitHub Pages
             const baseUrl = this.basePath ? `${this.basePath}/` : '';
-            let fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+            let fullUrl = url.startsWith('http') ? url : `${baseUrl}${url.replace(/^\.?\//, '')}`;
+
+            // Log URL construction for debugging
+            console.log(`🔍 Asset URL construction:
+                Base URL: "${baseUrl}"
+                Input URL: "${url}"
+                Final URL: "${fullUrl}"`);
 
             // Add cache-busting parameter for assets that might need updates
             // This allows browser to cache assets while allowing us to force refresh when needed

@@ -35,19 +35,19 @@ export class Game {
 
             // Define critical assets for your game (all major 3D models)
             const criticalAssets = [
-                'models/mascot.obj',
-                'models/mascot.png',
-                'models/skybox.glb',
-                'models/fountain.glb',     // Large central environment object
-                'models/tree.glb',         // Trees used throughout environment
-                'models/archway.glb',      // Architectural elements
-                'models/restaurant.glb',   // Buildings
-                'models/logo.glb',         // Important branding elements
-                'models/reporter.gltf',    // Character/object models
-                'models/reporter.jpeg',    // Associated textures
-                'models/camera.glb',       // Scene objects
-                'models/car1.glb',         // Vehicles
-                'models/car2.glb'          // More vehicles
+                './models/mascot.obj',
+                './models/mascot.png',
+                './models/skybox.glb',
+                './models/fountain.glb',     // Large central environment object
+                './models/tree.glb',         // Trees used throughout environment
+                './models/archway.glb',      // Architectural elements
+                './models/restaurant.glb',   // Buildings
+                './models/logo.glb',         // Important branding elements
+                './models/reporter.gltf',    // Character/object models
+                './models/reporter.jpeg',    // Associated textures
+                './models/camera.glb',       // Scene objects
+                './models/car1.glb',         // Vehicles
+                './models/car2.glb'          // More vehicles
             ];
 
             const allAssets = [
@@ -59,8 +59,15 @@ export class Game {
             // Calculate correct base path for GitHub Pages
             const isGitHubPages = window.location.hostname.includes('github.io');
             const repoName = '3js';
+            // Log current location for debugging
+            console.log(`📍 Current location:
+                Hostname: ${window.location.hostname}
+                Pathname: ${window.location.pathname}
+                Is GitHub Pages: ${isGitHubPages}`);
+            
             const basePath = isGitHubPages ? `/${repoName}` : '';
-            this.assetPreloader = new AssetPreloader(basePath.replace(/\/$/, ''));
+            console.log(`🌐 Using base path: "${basePath}"`);
+            this.assetPreloader = new AssetPreloader(basePath);
 
             // Set up progress and error callbacks
             this.assetPreloader.onProgress = (progress, loaded, total) => {
