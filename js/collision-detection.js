@@ -1,4 +1,6 @@
-// Comprehensive Collision Detection System
+// Comprehensive Collision Detection System with BVH Optimization
+// Note: three-mesh-bvh is loaded via UMD in HTML, available globally
+
 export class CollisionDetector {
     constructor() {
         this.collisions = [];
@@ -6,6 +8,132 @@ export class CollisionDetector {
         this.buildingPositions = [];
         this.treePositions = [];
         this.rockPositions = [];
+
+        // BVH structures for spatial queries
+        this.bvhMeshes = new Map(); // Mesh -> BVH mapping
+        this.bvhInitialized = false;
+    }
+
+    // Initialize BVH acceleration for raycasting
+    initializeBVH() {
+        if (typeof THREE !== 'undefined' && THREE.Mesh) {
+            try {
+                // Check if three-mesh-bvh UMD build is loaded globally
+                if (typeof window !== 'undefined' && window.MeshBVH && window.acceleratedRaycast) {
+                    // Enable accelerated raycasting globally
+                    THREE.Mesh.prototype.raycast = window.acceleratedRaycast;
+                    this.bvhInitialized = true;
+                    console.log('✅ BVH acceleration enabled for raycasting (UMD)');
+                    return;
+                }
+
+                // Fallback: try direct global access
+                if (typeof MeshBVH !== 'undefined' && typeof acceleratedRaycast !== 'undefined') {
+                    THREE.Mesh.prototype.raycast = acceleratedRaycast;
+                    this.bvhInitialized = true;
+                    console.log('✅ BVH acceleration enabled for raycasting (global)');
+                    return;
+                }
+
+                console.warn('⚠️ three-mesh-bvh not found globally');
+                this.bvhInitialized = false;
+            } catch (error) {
+                console.warn('⚠️ BVH acceleration failed:', error);
+                this.bvhInitialized = false;
+            }
+        }
+    }
+
+    // Build BVH for a mesh (for raycasting optimization)
+    buildBVHForMesh(mesh) {
+        if (!mesh.geometry || !this.bvhInitialized) return null;
+
+        try {
+            // Get MeshBVH constructor from global scope
+            const MeshBVH = typeof window !== 'undefined' && window.MeshBVH ? window.MeshBVH :
+                           typeof global !== 'undefined' && global.MeshBVH ? global.MeshBVH :
+                           typeof MeshBVH !== 'undefined' ? MeshBVH : null;
+
+            if (!MeshBVH) {
+                console.warn('⚠️ MeshBVH constructor not found');
+                return null;
+            }
+
+            // Compute bounds tree for the geometry
+            const bvh = new MeshBVH(mesh.geometry);
+            this.bvhMeshes.set(mesh, bvh);
+
+            // Store BVH reference in mesh for easy access
+            mesh.userData.bvh = bvh;
+
+            console.log(`🏗️ Built BVH for mesh: ${mesh.name || 'unnamed'}`);
+            return bvh;
+        } catch (error) {
+            console.warn('⚠️ Failed to build BVH for mesh:', error);
+            return null;
+        }
+    }
+
+    // Fast ray-mesh intersection using BVH
+    raycastMesh(raycaster, mesh) {
+        if (!mesh.userData.bvh) {
+            this.buildBVHForMesh(mesh);
+        }
+
+        const bvh = mesh.userData.bvh;
+        if (!bvh) return [];
+
+        // Use BVH-accelerated raycasting
+        const intersects = [];
+        raycaster.intersectObject(mesh, false, intersects);
+        return intersects;
+    }
+
+    // Fast spatial query using BVH for collision detection
+    queryBVHSphere(center, radius) {
+        const results = [];
+
+        // Check each BVH-enabled mesh for sphere intersection
+        this.bvhMeshes.forEach((bvh, mesh) => {
+            try {
+                // Create a sphere for the query
+                const sphere = new THREE.Sphere(center, radius);
+
+                // Use BVH to find intersecting triangles
+                const triangles = [];
+                bvh.intersectsSphere(sphere, triangles);
+
+                if (triangles.length > 0) {
+                    results.push({
+                        mesh: mesh,
+                        triangles: triangles.length,
+                        distance: center.distanceTo(mesh.position)
+                    });
+                }
+            } catch (error) {
+                console.warn('BVH sphere query failed:', error);
+            }
+        });
+
+        return results;
+    }
+
+    // Fast bounding box query using BVH
+    queryBVHBox(box) {
+        const results = [];
+
+        this.bvhMeshes.forEach((bvh, mesh) => {
+            try {
+                const intersects = bvh.intersectsBox(box);
+                if (intersects) {
+                    results.push(mesh);
+                }
+            } catch (error) {
+                console.warn('BVH box query failed:', error);
+            }
+        });
+
+        return results;
     }
 
     // Add road positions for collision detection
@@ -40,23 +168,47 @@ export class CollisionDetector {
         console.log(`📊 Added ${this.roadPositions.length} road positions for collision detection`);
     }
 
-    // Add building positions for collision detection
+    // Add building positions for collision detection (more precise colliders)
     addBuildings(buildings) {
         this.buildingPositions = [];
-        buildings.forEach(building => {
+        buildings.forEach((building, index) => {
             if (building.children && building.children.length > 0) {
-                // Get bounding box for building group
-                const box = new THREE.Box3().setFromObject(building);
+                // Find the main building structure (usually the largest child)
+                let mainStructure = building.children[0];
+                let maxVolume = 0;
+
+                building.children.forEach(child => {
+                    if (child.geometry) {
+                        const box = new THREE.Box3().setFromObject(child);
+                        const size = box.getSize(new THREE.Vector3());
+                        const volume = size.x * size.y * size.z;
+
+                        if (volume > maxVolume) {
+                            maxVolume = volume;
+                            mainStructure = child;
+                        }
+                    }
+                });
+
+                // Use main structure for collision (smaller, more accurate)
+                const box = new THREE.Box3().setFromObject(mainStructure);
                 const size = box.getSize(new THREE.Vector3());
                 const center = box.getCenter(new THREE.Vector3());
-                
+
+                // Make collider slightly smaller than visual mesh
+                const colliderScale = 0.85; // 15% smaller than visual
+
                 this.buildingPositions.push({
                     x: center.x,
                     z: center.z,
-                    width: size.x,
-                    height: size.z,
-                    type: 'building'
+                    width: size.x * colliderScale,
+                    height: size.z * colliderScale,
+                    type: 'building',
+                    mesh: building,
+                    index: index
                 });
+
+                console.log(`🏢 Building ${index + 1} collider: ${size.x.toFixed(1)}×${size.z.toFixed(1)} → ${size.x * colliderScale.toFixed(1)}×${size.z * colliderScale.toFixed(1)}`);
             }
         });
         console.log(`🏢 Added ${this.buildingPositions.length} building positions for collision detection`);
@@ -65,22 +217,30 @@ export class CollisionDetector {
     // Add tree positions for collision detection
     addTrees(trees) {
         this.treePositions = [];
-        trees.forEach(tree => {
+        trees.forEach((tree, index) => {
             const position = tree.position;
             const scale = tree.scale;
-            const radius = 1.5 * Math.max(scale.x, scale.z); // Tree canopy radius
-            
+            // Reduced from 1.5x to 1.2x for more accurate tree colliders
+            const radius = 1.2 * Math.max(scale.x, scale.z); // More accurate tree canopy radius
+
             this.treePositions.push({
                 x: position.x,
                 z: position.z,
                 radius: radius,
-                type: 'tree'
+                type: 'tree',
+                mesh: tree,
+                index: index
             });
+
+            // Log tree collider sizes for debugging
+            if (index < 5) { // Only log first few to avoid spam
+                console.log(`🌳 Tree ${index + 1} collider radius: ${radius.toFixed(1)} (scale: ${scale.x.toFixed(1)})`);
+            }
         });
         console.log(`🌳 Added ${this.treePositions.length} tree positions for collision detection`);
     }
 
-    // Add rocks from terrain.userData.rocks if available
+    // Add rocks from terrain.userData.rocks if available (more precise colliders)
     addRocksFromTerrain(terrain) {
         this.rockPositions = [];
         const rocks = terrain && terrain.userData && terrain.userData.rocks ? terrain.userData.rocks : [];
@@ -88,13 +248,24 @@ export class CollisionDetector {
             const box = new THREE.Box3().setFromObject(rock);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
+
+            // Make rock colliders smaller and more precise
+            const colliderScale = 0.8; // 20% smaller than visual
+
             this.rockPositions.push({
                 x: center.x,
                 z: center.z,
-                width: size.x,
-                height: size.z,
-                type: 'rock'
+                width: size.x * colliderScale,
+                height: size.z * colliderScale,
+                type: 'rock',
+                mesh: rock,
+                index: i
             });
+
+            // Log first few rock colliders for debugging
+            if (i < 3) {
+                console.log(`🪨 Rock ${i + 1} collider: ${size.x.toFixed(1)}×${size.z.toFixed(1)} → ${size.x * colliderScale.toFixed(1)}×${size.z * colliderScale.toFixed(1)}`);
+            }
         });
         console.log(`🪨 Added ${this.rockPositions.length} rock positions for collision detection`);
     }

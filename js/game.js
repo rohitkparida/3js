@@ -175,6 +175,9 @@ export class Game {
         // Create collision detector
         this.collisionDetector = new CollisionDetector();
 
+        // Initialize BVH acceleration for collision detection and raycasting
+        this.collisionDetector.initializeBVH();
+
         // Run initial collision detection
         this.runCollisionDetection();
 
