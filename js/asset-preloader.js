@@ -211,7 +211,7 @@ export class AssetPreloader {
     async performAssetLoad(url) {
         try {
             // Construct full URL with base path for GitHub Pages
-            const baseUrl = this.basePath || '';
+            const baseUrl = this.basePath ? `${this.basePath}/` : '';
             let fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
 
             // Add cache-busting parameter for assets that might need updates
@@ -329,7 +329,7 @@ export class AssetPreloader {
      */
     async isAssetCachedByBrowser(url) {
         try {
-            const baseUrl = this.basePath || '';
+            const baseUrl = this.basePath ? `${this.basePath}/` : '';
             const fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
 
             const response = await fetch(fullUrl, {

@@ -60,7 +60,7 @@ export class Game {
             const isGitHubPages = window.location.hostname.includes('github.io');
             const repoName = '3js';
             const basePath = isGitHubPages ? `/${repoName}` : '';
-            this.assetPreloader = new AssetPreloader(basePath);
+            this.assetPreloader = new AssetPreloader(basePath.replace(/\/$/, ''));
 
             // Set up progress and error callbacks
             this.assetPreloader.onProgress = (progress, loaded, total) => {
