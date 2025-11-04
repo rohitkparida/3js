@@ -127,9 +127,11 @@ export function createRenderer(canvas) {
     renderer.setPixelRatio(pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     
-    // Enable and configure shadows
+    // Enhanced shadow configuration
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = isMobile ? THREE.BasicShadowMap : THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = isHighEndDevice ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    renderer.shadowMap.autoUpdate = true;
+    renderer.shadowMap.needsUpdate = true;
     
     // Optimize renderer settings
     renderer.autoClear = true;
@@ -247,23 +249,26 @@ export function setupLighting(scene) {
     
     // Dynamic shadow quality based on device
     const isHighEndDevice = !isMobile && window.devicePixelRatio > 1;
-    const shadowMapSize = isMobile ? 512 : (isHighEndDevice ? 2048 : 1024);
+    const shadowMapSize = isMobile ? 1024 : (isHighEndDevice ? 4096 : 2048);
     
-    // Set shadow map properties
+    // Enhanced shadow map properties
     directionalLight.shadow.mapSize.width = shadowMapSize;
     directionalLight.shadow.mapSize.height = shadowMapSize;
-    directionalLight.shadow.bias = -0.001;
     
+    // Improved bias settings to reduce artifacts
+    directionalLight.shadow.bias = -0.0005;  // Reduced bias for better contact
+    
+    // Enable normal bias to reduce shadow acne
     if ('normalBias' in directionalLight.shadow) {
-        directionalLight.shadow.normalBias = 0.05;
+        directionalLight.shadow.normalBias = 0.02;  // Reduced for better quality
     }
     
     // Optimize shadow camera frustum
-    directionalLight.shadow.camera.near = 1;
-    directionalLight.shadow.camera.far = 150;
+    directionalLight.shadow.camera.near = 0.5;  // Closer near plane for better precision
+    directionalLight.shadow.camera.far = 200;   // Increased far plane to cover more area
     
-    // Tighten shadow frustum to cover just the visible area
-    const shadowDistance = 50;
+    // Adjust shadow frustum to cover the visible area
+    const shadowDistance = 80;  // Increased for larger coverage
     directionalLight.shadow.camera.left = -shadowDistance;
     directionalLight.shadow.camera.right = shadowDistance;
     directionalLight.shadow.camera.top = shadowDistance;
@@ -272,9 +277,9 @@ export function setupLighting(scene) {
     // Update the shadow camera's projection matrix
     directionalLight.shadow.camera.updateProjectionMatrix();
     
-    // Additional softness for PCFSoft
+    // Enhanced soft shadows
     if ('radius' in directionalLight.shadow) {
-        directionalLight.shadow.radius = 2;
+        directionalLight.shadow.radius = 3;  // Slightly increased for smoother edges
     }
     
     scene.add(directionalLight);

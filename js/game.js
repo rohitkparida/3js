@@ -38,7 +38,7 @@ export class Game {
                 './models/mascot.obj',
                 './models/mascot.png',
                 './models/skybox.glb',
-                './models/fountain.glb',     // Large central environment object
+                './models/fountain_optimized.glb',     // Large central environment object (optimized version)
                 './models/tree.glb',         // Trees used throughout environment
                 './models/archway.glb',      // Architectural elements
                 './models/restaurant.glb',   // Buildings

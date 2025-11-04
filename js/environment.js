@@ -397,8 +397,8 @@ export class EnvironmentManager {
 
         // Add animated fountain near spawn
         try {
-            console.log('🔄 Loading fountain from models/fountain.glb...');
-            const fountainPath = 'models/fountain.glb';
+            console.log('🔄 Loading fountain from models/fountain_optimized.glb...');
+            const fountainPath = 'models/fountain_optimized.glb';
             
             try {
                 // Check if the file exists first
