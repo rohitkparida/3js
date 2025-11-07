@@ -35,17 +35,17 @@ export class Game {
 
             // Define critical assets for your game (all major 3D models)
             const criticalAssets = [
-                './models/simplify_mascot.obj',  // Optimized mascot model
-                './models/mascot.png',           // Mascot texture
-                './models/skybox.glb',
-                './models/fountain_optimized.glb',     // Large central environment object (optimized version)
-                './models/tree.glb',         // Trees used throughout environment
-                './models/archway.glb',      // Architectural elements
-                './models/restaurant.glb',   // Buildings
-                './models/logo.glb',         // Important branding elements
-                './models/camera.glb',       // Scene objects
-                './models/car1.glb',         // Vehicles
-                './models/car2.glb'          // More vehicles
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/simplify_mascot.obj',  // Optimized mascot model
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/mascot.png',           // Mascot texture
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/skybox.glb',
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/fountain_optimized.glb',     // Large central environment object (optimized version)
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/tree.glb',         // Trees used throughout environment
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/archway.glb',      // Architectural elements
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/restaurant.glb',   // Buildings
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/logo.glb',         // Important branding elements
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/camera.glb',       // Scene objects
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/car1.glb',         // Vehicles
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/car2.glb'          // More vehicles
             ];
 
             const allAssets = [
