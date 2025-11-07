@@ -351,7 +351,7 @@ export class EnvironmentManager {
         });
         
         // Create an archway at the very north entrance over Central Avenue (use GLB if available)
-        const archway = await this.createArchwayFromGLB('models/archway.glb', 0, -66).catch(() => null);
+        const archway = await this.createArchwayFromGLB('https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/archway.glb', 0, -66).catch(() => null);
         if (archway) {
             archway.scale.multiplyScalar(1.25);
             this.scene.add(archway);
@@ -367,7 +367,7 @@ export class EnvironmentManager {
 
         // Add logo on a podium near the center
         try {
-            const logoGroup = await this.createLogoOnPodium('models/logo.glb', { x: 6, z: -62, ry: Math.PI / 8 });
+            const logoGroup = await this.createLogoOnPodium('https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/logo.glb', { x: 6, z: -62, ry: Math.PI / 8 });
             if (logoGroup) {
                 this.scene.add(logoGroup);
                 this.objects.push(logoGroup);
@@ -387,7 +387,7 @@ export class EnvironmentManager {
         // try {
         //     if (this.scene) {
         //         const reporterObj = this.scene.getObjectByName('reporter_npc');
-        //         const cameraRig = await this.loadAndPlaceTripodCamera('models/camera.glb', reporterObj, { distance: 3.2, height: 1.4, azimuth: Math.PI * 0.12 });
+        //         const cameraRig = await this.loadAndPlaceTripodCamera('https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/camera.glb', reporterObj, { distance: 3.2, height: 1.4, azimuth: Math.PI * 0.12 });
         //         if (cameraRig) {
         //             this.scene.add(cameraRig);
         //             // Not adding to physics; decorative and static
@@ -397,8 +397,8 @@ export class EnvironmentManager {
 
         // Add animated fountain near spawn
         try {
-            console.log('🔄 Loading fountain from models/fountain_optimized.glb...');
-            const fountainPath = 'models/fountain_optimized.glb';
+            console.log('🔄 Loading fountain from CDN...');
+            const fountainPath = 'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/fountain_optimized.glb';
             
             try {
                 // Check if the file exists first
@@ -426,8 +426,8 @@ export class EnvironmentManager {
         }
         // Add restaurant near spawn point
         try {
-            console.log('🔄 Loading restaurant from models/restaurant.glb...');
-            const restaurantPath = 'models/restaurant.glb';
+            console.log('🔄 Loading restaurant from CDN...');
+            const restaurantPath = 'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/restaurant.glb';
             
             const response = await fetch(restaurantPath, { method: 'HEAD' });
             if (!response.ok) {

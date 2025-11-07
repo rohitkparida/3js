@@ -347,7 +347,7 @@ export function setupLighting(scene) {
         if (CONFIG.SCENE.ENABLE_SKYBOX && THREE && THREE.GLTFLoader) {
             const loader = new THREE.GLTFLoader();
             loader.load(
-                './models/skybox.glb',
+                'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/skybox.glb',
                 (gltf) => {
                     const skybox = gltf.scene;
                     // Ensure materials render as a backdrop without killing embedded textures

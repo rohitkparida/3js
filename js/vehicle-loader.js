@@ -203,8 +203,8 @@ export class VehicleLoader {
         
         // Your GLB car models - using the actual filenames
         const carModels = [
-            './models/car1.glb',
-            './models/car2.glb' // Using same model for now, you can add the second model filename
+            'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/car1.glb',
+            'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/car2.glb' // Using same model for now, you can add the second model filename
         ];
         
         const carConfigs = [

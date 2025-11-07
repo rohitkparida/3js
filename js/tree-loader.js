@@ -149,7 +149,7 @@ export class TreeLoader {
         const trees = [];
         
         // Tree model URL
-        const treeModelUrl = './models/tree.glb';
+        const treeModelUrl = 'https://pub-d431c70e4f694f86bed379157ed5af34.r2.dev/models/tree.glb';
         
         // Safe tree positions - far from roads (reduced for performance - 25 total)
         let treePositions = [
